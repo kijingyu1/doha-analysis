@@ -42,12 +42,16 @@ def set_style():
         .fire-emoji { font-size: 3rem; }
         .login-box { max-width: 400px; margin: 0 auto; padding: 40px; background-color: white; border-radius: 20px; text-align: center; }
         .install-guide { background-color: #e3f2fd; padding: 15px; border-radius: 10px; border: 1px solid #90caf9; margin-bottom: 15px; color: #0d47a1; font-size: 0.9rem; }
+        .visitor-badge { background-color: #333; color: #00ff00; padding: 10px; border-radius: 5px; font-family: 'Courier New', monospace; text-align: center; font-weight: bold; margin-top: 20px; }
         
-        /* 방문자 카운터 (관리자용) */
-        .visitor-badge {
-            background-color: #333; color: #00ff00; padding: 10px; border-radius: 5px;
-            font-family: 'Courier New', monospace; text-align: center; font-weight: bold; margin-top: 20px;
-        }
+        /* 커뮤니티 스타일 */
+        .chat-row { padding: 10px; border-bottom: 1px solid #eee; background-color: white; margin-bottom: 5px; border-radius: 5px; }
+        .chat-user { font-weight: bold; color: #ff6f0f; font-size: 0.9rem; }
+        .chat-time { font-size: 0.7rem; color: #999; float: right; }
+        .chat-msg { margin-top: 5px; color: #333; }
+        
+        /* 공지사항 스타일 */
+        .notice-bar { background-color: #fff3cd; color: #856404; padding: 15px; border-radius: 5px; margin-bottom: 20px; border: 1px solid #ffeeba; }
         </style>
     """, unsafe_allow_html=True)
 
@@ -74,8 +78,51 @@ def send_email_safe(name, phone, client_email, req_text, type_tag):
     except Exception as e: return False, f"전송 실패: {str(e)}"
 
 # -----------------------------------------------------------------------------
-# [기능 3] 데이터 엔진 & 접속 로그 관리
+# [기능 3] 데이터 관리 (공지, 커뮤니티, 로그)
 # -----------------------------------------------------------------------------
+NOTICE_FILE = "notice.csv"
+COMMUNITY_FILE = "community.csv"
+LOGIN_LOG_FILE = "login_log_v2.csv"
+
+# 1. 공지사항
+def get_notice():
+    if os.path.exists(NOTICE_FILE):
+        try:
+            df = pd.read_csv(NOTICE_FILE)
+            if not df.empty: return df.iloc[-1]['message'] # 가장 최근 공지
+        except: pass
+    return "👋 환영합니다! 사장님들의 성공 비서 DOHA입니다."
+
+def set_notice(msg):
+    df = pd.DataFrame([{"timestamp": datetime.now(), "message": msg}])
+    df.to_csv(NOTICE_FILE, index=False)
+
+# 2. 커뮤니티
+def save_post(user, msg):
+    new_row = {"timestamp": datetime.now().strftime("%m/%d %H:%M"), "user": user, "message": msg}
+    if os.path.exists(COMMUNITY_FILE): df = pd.read_csv(COMMUNITY_FILE)
+    else: df = pd.DataFrame(columns=["timestamp", "user", "message"])
+    df = pd.concat([pd.DataFrame([new_row]), df], ignore_index=True)
+    df.to_csv(COMMUNITY_FILE, index=False)
+
+def get_posts():
+    if os.path.exists(COMMUNITY_FILE): return pd.read_csv(COMMUNITY_FILE)
+    return pd.DataFrame()
+
+# 3. 로그인 로그
+def log_login_event(store_name):
+    now = datetime.now()
+    new_row = {"timestamp": now.strftime("%Y-%m-%d %H:%M:%S"), "store": store_name}
+    if os.path.exists(LOGIN_LOG_FILE): df = pd.read_csv(LOGIN_LOG_FILE)
+    else: df = pd.DataFrame(columns=["timestamp", "store"])
+    df = pd.concat([pd.DataFrame([new_row]), df], ignore_index=True)
+    df.to_csv(LOGIN_LOG_FILE, index=False)
+
+def get_login_logs():
+    if os.path.exists(LOGIN_LOG_FILE): return pd.read_csv(LOGIN_LOG_FILE)
+    return pd.DataFrame()
+
+# 4. 외부 데이터 (금융, 뉴스)
 @st.cache_data(ttl=1800)
 def get_finance_data():
     try:
@@ -96,7 +143,7 @@ def get_finance_data():
     except: return {}
 
 def get_real_google_news():
-    keywords = ["소상공인", "자영업", "지원금", "정책", "세금", "대출금리", "최저임금", "창업", "폐업"]
+    keywords = ["소상공인", "자영업", "지원금", "정책", "세금", "창업", "폐업"]
     query = "+OR+".join(keywords)
     url = f"https://news.google.com/rss/search?q={query}&hl=ko&gl=KR&ceid=KR:ko"
     try:
@@ -110,30 +157,28 @@ def get_today_fortune():
     random.seed(datetime.now().day)
     return random.choice(fortunes)
 
-# --- [핵심] 접속 로그 시스템 (매장명 기록) ---
-LOGIN_LOG_FILE = "login_log_v2.csv"
+# 5. AI 문구 생성 (간단 규칙 기반)
+def generate_copy(menu, vibe):
+    templates = {
+        "감성": [
+            f"비 오는 날, {menu} 어떠세요? 마음까지 따뜻해집니다.",
+            f"고생한 나에게 주는 선물, {menu} 한 입의 행복.",
+            f"{menu}의 계절이 왔습니다. 소중한 사람과 함께하세요."
+        ],
+        "유머": [
+            f"사장님이 미쳤어요! {menu}에 영혼을 갈아 넣었습니다.",
+            f"집 나간 며느리도 돌아온다는 {menu}, 사실 제가 먹으려다 팝니다.",
+            f"다이어트는 내일부터, {menu}는 오늘부터!"
+        ],
+        "강조": [
+            f"🚨 긴급! {menu} 품절 임박! 지금 아니면 못 먹습니다.",
+            f"동네 1등 {menu}! 직접 드셔보시고 판단하세요.",
+            f"재료를 아끼면 망한다! {menu}에 진심인 사장이 만듭니다."
+        ]
+    }
+    return random.choice(templates[vibe])
 
-def log_login_event(store_name):
-    # 로그인 성공 시에만 기록
-    now = datetime.now()
-    new_row = {"timestamp": now.strftime("%Y-%m-%d %H:%M:%S"), "store": store_name}
-    
-    # 기존 로그 불러오기 또는 생성
-    if os.path.exists(LOGIN_LOG_FILE):
-        df = pd.read_csv(LOGIN_LOG_FILE)
-    else:
-        df = pd.DataFrame(columns=["timestamp", "store"])
-        
-    # 기록 추가
-    df = pd.concat([pd.DataFrame([new_row]), df], ignore_index=True)
-    df.to_csv(LOGIN_LOG_FILE, index=False)
-
-def get_login_logs():
-    if os.path.exists(LOGIN_LOG_FILE):
-        return pd.read_csv(LOGIN_LOG_FILE)
-    return pd.DataFrame()
-
-# 출퇴근부 로직
+# 출퇴근부
 def get_csv_filename():
     safe_name = "".join([c for c in st.session_state.store_name if c.isalnum()])
     return f"log_{safe_name}.csv"
@@ -156,92 +201,65 @@ set_style()
 if 'logged_in' not in st.session_state: st.session_state.logged_in = False
 if 'store_name' not in st.session_state: st.session_state.store_name = ""
 
-# 로그인 화면
+# 로그인
 if not st.session_state.logged_in:
     st.markdown("<br><br>", unsafe_allow_html=True)
     c1, c2, c3 = st.columns([1, 2, 1])
     with c2:
         st.markdown("<div class='login-box'><h1>🥕 DOHA 사장님 비서</h1><p>로그인 (키오스크 방식)</p></div>", unsafe_allow_html=True)
         st.markdown("<br>", unsafe_allow_html=True)
-        
         with st.expander("📲 카톡에서 들어오셨나요? (설치법)"):
             st.markdown("**우측 하단 점 3개 → [다른 브라우저로 열기] → [홈 화면에 추가]**")
-
         store_input = st.text_input("매장 이름 (예: 도하분식)")
         pw_input = st.text_input("비밀번호 (숫자 4자리)", type="password")
-        
         if st.button("입장하기"):
             if store_input and pw_input:
                 st.session_state.logged_in = True
                 st.session_state.store_name = store_input
-                
-                # [NEW] 로그인 성공 시 기록 남기기 (관리자 제외하고 기록할 수도 있지만, 일단 다 기록)
-                if store_input != "관리자":
-                    log_login_event(store_input)
-                
+                if store_input != "관리자": log_login_event(store_input)
                 st.rerun()
             else: st.warning("정보를 입력해주세요.")
-            
-    # 전체 누적 접속 수 표시 (사회적 증거)
-    logs = get_login_logs()
-    total_visits = len(logs)
-    st.markdown(f"""
-    <div style='text-align:center; color:#888; margin-top:20px;'>
-    👀 현재까지 <b>{total_visits:,}번</b>의 사장님 방문이 있었습니다.
-    </div>
-    """, unsafe_allow_html=True)
-    
     st.stop()
 
 # 메인 화면
 with st.sidebar:
     st.write(f"👤 **{st.session_state.store_name}**님")
     
-    # [핵심] 관리자 전용 기능 (매장명이 '관리자'일 때만 보임)
+    # 관리자 기능 (공지 쓰기 + 로그 보기)
     if st.session_state.store_name == "관리자":
-        st.success("🔒 관리자 모드 활성화")
+        st.info("🔧 관리자 기능")
         
-        # 로그 불러오기
+        # 공지 작성
+        with st.expander("📢 공지사항 등록"):
+            new_notice = st.text_input("공지 내용")
+            if st.button("공지 올리기"):
+                set_notice(new_notice)
+                st.success("등록됨")
+        
+        # 로그 보기
         logs = get_login_logs()
-        total_visits = len(logs)
-        
-        st.markdown(f"""
-        <div class='visitor-badge'>
-        Total Visits<br>
-        {total_visits:,}
-        </div>
-        """, unsafe_allow_html=True)
-        
-        with st.expander("🕵️‍♂️ 실시간 접속 현황 (상세)", expanded=True):
-            if not logs.empty:
-                st.dataframe(logs, hide_index=True)
-                # 다운로드 기능
-                csv = logs.to_csv(index=False).encode('utf-8-sig')
-                st.download_button("📥 로그 다운로드", csv, "login_log.csv", "text/csv")
-            else:
-                st.write("아직 접속 기록이 없습니다.")
-    else:
-        # 일반 사용자는 설치 방법만 보임
-        with st.expander("📲 앱 설치 방법"):
-            st.info("카톡 우측 하단 점 3개 → [다른 브라우저로 열기] → [홈 화면에 추가]")
+        st.markdown(f"<div class='visitor-badge'>Total: {len(logs):,}</div>", unsafe_allow_html=True)
+        with st.expander("접속 로그"):
+            if not logs.empty: st.dataframe(logs, hide_index=True)
 
+    with st.expander("📲 앱 설치 방법"):
+        st.info("카톡 우측 하단 점 3개 → [다른 브라우저로 열기] → [홈 화면에 추가]")
     if st.button("로그아웃"):
         st.session_state.logged_in = False
         st.rerun()
 
 st.title(f"🥕 DOHA 사장님 비서 ({st.session_state.store_name})")
 
-st.markdown("""
-<div class='install-guide'>
-<b>💡 꿀팁:</b> 카톡 말고 <b>[다른 브라우저로 열기]</b> 하신 뒤, <b>[홈 화면에 추가]</b> 하시면 앱처럼 쓸 수 있습니다!
-</div>
-""", unsafe_allow_html=True)
+# [공지사항 바] 최상단 노출
+current_notice = get_notice()
+st.markdown(f"<div class='notice-bar'>📢 <b>[공지]</b> {current_notice}</div>", unsafe_allow_html=True)
 
 st.caption(f"오늘 날짜: {datetime.now().strftime('%Y년 %m월 %d일')}")
 
-tab1, tab2, tab3, tab4 = st.tabs(["🏠 데일리 홈", "🔍 전국 당근검색", "⏰ 직원 출퇴근", "🔥 화재보험 점검"])
+# 탭 구성 (소통/제휴, 홍보문구 추가)
+tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["🏠 홈", "🔍 당근검색", "⏰ 출퇴근", "🔥 보험점검", "💬 소통/제휴", "✍️ 홍보문구"])
 
-# [TAB 1] 데일리 홈
+# [TAB 1~4] 기존 기능 유지
 with tab1:
     st.subheader("📰 오늘의 사장님 필수 뉴스")
     news_list = get_real_google_news()
@@ -252,7 +270,6 @@ with tab1:
                 date_str = f"{news.published_parsed.tm_mon}/{news.published_parsed.tm_mday}"
                 st.markdown(f"<div class='news-item'><span style='color:#ff6f0f;'>●</span> <a href='{news.link}' target='_blank'>{news.title}</a> <span>({date_str})</span></div>", unsafe_allow_html=True)
             st.markdown("</div>", unsafe_allow_html=True)
-
     st.markdown("---")
     col_left, col_right = st.columns(2)
     with col_left:
@@ -266,8 +283,7 @@ with tab1:
                 color = "red" if data['change'] > 0 else "blue"
                 sign = "▲" if data['change'] > 0 else "▼"
                 st.markdown(f"<div class='finance-box'><div class='finance-title'>{name}</div><div class='finance-val'>{data['price']:,.2f}</div><div class='finance-change' style='color:{color};'>{sign} {abs(data['change']):.2f} ({data['pct']:.2f}%)</div></div>", unsafe_allow_html=True)
-        else: st.info("금융 정보 로딩 중...")
-
+        else: st.info("로딩 중...")
     with col_right:
         st.subheader("🧮 오늘의 목표 매출")
         st.markdown("""<div class='metric-card'>고정비를 입력하면 <b>오늘 목표치</b>를 계산해드립니다.</div>""", unsafe_allow_html=True)
@@ -281,7 +297,6 @@ with tab1:
             target_sales = daily_fixed / (margin / 100)
             st.success(f"💰 오늘 목표 매출: **{int(target_sales):,}원** (BEP)")
 
-# [TAB 2] 당근 검색
 with tab2:
     st.header("🔍 당근마켓 전국 매물 찾기")
     keyword = st.text_input("찾으시는 물건", "")
@@ -291,7 +306,6 @@ with tab2:
             st.markdown(f"<br><a href='{url}' target='_blank' style='background-color:#ff6f0f;color:white;padding:15px;display:block;text-decoration:none;border-radius:10px;font-weight:bold;text-align:center;'>👉 '{keyword}' 전국 매물 보기 (클릭)</a>", unsafe_allow_html=True)
         else: st.warning("검색어를 입력해주세요.")
 
-# [TAB 3] 출퇴근
 with tab3:
     st.header(f"⏰ {st.session_state.store_name} 출퇴근부")
     c1, c2 = st.columns(2)
@@ -306,7 +320,6 @@ with tab3:
     df_log = load_attendance()
     if not df_log.empty: st.dataframe(df_log, use_container_width=True)
 
-# [TAB 4] 화재보험
 with tab4:
     st.markdown("""<div class='event-box'><h2>☕ 스타벅스 100% 증정</h2><b>"상담만 받아도 조건 없이 드립니다!"</b></div>""", unsafe_allow_html=True)
     st.header("🔥 우리 가게 안전 점검")
@@ -314,7 +327,6 @@ with tab4:
     with c1: st.markdown("""<div class='fire-info-box'><span class='fire-emoji'>🔥</span><div class='fire-title'>내 가게가 탈 때</div><div class='fire-desc'>건물주 보험은 보상해주지 않습니다.</div></div>""", unsafe_allow_html=True)
     with c2: st.markdown("""<div class='fire-info-box'><span class='fire-emoji'>🏘️</span><div class='fire-title'>옆 가게 피해</div><div class='fire-desc'>옮겨붙은 불 피해도 다 물어줘야 합니다.</div></div>""", unsafe_allow_html=True)
     with c3: st.markdown("""<div class='fire-info-box'><span class='fire-emoji'>🤕</span><div class='fire-title'>손님 부상</div><div class='fire-desc'>치료비, 합의금 모두 사장님 책임입니다.</div></div>""", unsafe_allow_html=True)
-
     st.markdown("---")
     st.subheader("🏥 내 보험 & 배상책임 진단")
     c1, c2 = st.columns(2)
@@ -322,7 +334,6 @@ with tab4:
     size = c2.number_input("매장 평수", value=20)
     st.markdown("<br><b>'시설물배상책임보험' 가입 여부</b>", unsafe_allow_html=True)
     liab_check = st.radio("배상책임 여부", ["네, 가입했습니다.", "아니요 / 잘 모르겠습니다."], label_visibility="collapsed")
-
     if st.button("💰 종합 진단"):
         std = size * 1000 + 10000 
         diff = curr - std
@@ -330,7 +341,6 @@ with tab4:
         else: st.success("✅ 보험료는 적정합니다.")
         if liab_check == "아니요 / 잘 모르겠습니다.":
             st.markdown("""<div style='background-color:#fff3cd; padding:20px; border-radius:10px; border:2px solid red; margin-top:20px;'><h3 style='color:red;'>🚨 [긴급 경고] 배상책임 미가입 위험!</h3><b>손님이 매장에서 다치면 큰일 납니다.</b> 즉시 확인이 필요합니다.</div>""", unsafe_allow_html=True)
-
     st.markdown("---")
     with st.form("starbucks_form_fire"):
         c1, c2 = st.columns(2)
@@ -344,3 +354,61 @@ with tab4:
                 if s: st.balloons(); st.success("신청 완료!")
                 else: st.error(m)
             else: st.warning("정보를 입력하세요.")
+
+# [TAB 5] 소통/제휴 (NEW)
+with tab5:
+    st.header("💬 사장님 대나무숲 (익명)")
+    st.caption("장사하면서 힘들었던 일, 궁금한 점 자유롭게 나누세요.")
+    
+    # 글쓰기
+    with st.form("community_form"):
+        user_msg = st.text_input("하고 싶은 말", placeholder="익명으로 등록됩니다.")
+        if st.form_submit_button("글 남기기"):
+            if user_msg:
+                save_post(st.session_state.store_name, user_msg)
+                st.success("등록되었습니다.")
+                st.rerun()
+    
+    # 글 목록 표시
+    st.markdown("---")
+    posts = get_posts()
+    if not posts.empty:
+        # 최신순 정렬
+        for idx, row in posts[::-1].iterrows():
+            st.markdown(f"""
+            <div class='chat-row'>
+                <span class='chat-user'>🥕 {row['user']}</span>
+                <span class='chat-time'>{row['timestamp']}</span>
+                <div class='chat-msg'>{row['message']}</div>
+            </div>
+            """, unsafe_allow_html=True)
+    else:
+        st.info("첫 번째 글을 남겨주세요!")
+
+    # 제휴/광고 문의 섹션
+    st.markdown("<br><br>", unsafe_allow_html=True)
+    st.subheader("🤝 제휴 및 광고 문의")
+    st.info("식자재 납품, 인테리어, 마케팅 등 사장님들께 도움되는 업체의 제휴를 환영합니다.")
+    with st.expander("문의하기"):
+        st.markdown("이메일 문의: **kidoha84@gmail.com**")
+
+# [TAB 6] 홍보 문구 생성기 (NEW)
+with tab6:
+    st.header("✍️ AI 홍보 문구 생성기")
+    st.markdown("당근마켓, 인스타에 올릴 글, 고민하지 마세요!")
+    
+    c1, c2 = st.columns(2)
+    menu_name = c1.text_input("메뉴/상품 이름", placeholder="예: 떡볶이, 겨울 코트")
+    vibe = c2.selectbox("원하는 느낌", ["감성", "유머", "강조"])
+    
+    if st.button("✨ 문구 생성하기"):
+        if menu_name:
+            copy = generate_copy(menu_name, vibe)
+            st.markdown(f"""
+            <div style='background-color:#e3f2fd; padding:20px; border-radius:10px; margin-top:10px;'>
+            <h3>📝 추천 문구</h3>
+            <p style='font-size:1.2rem;'>{copy}</p>
+            </div>
+            """, unsafe_allow_html=True)
+        else:
+            st.warning("상품 이름을 입력해주세요.")
