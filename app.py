@@ -3,12 +3,12 @@ import pandas as pd
 import numpy as np
 import requests
 import feedparser
+import yfinance as yf # 주식 정보용
 import random
 from datetime import datetime
 import smtplib
 from email.mime.text import MIMEText
 import os
-from bs4 import BeautifulSoup # 웹 크롤링용
 
 # -----------------------------------------------------------------------------
 # [0] 페이지 설정
@@ -28,27 +28,34 @@ def set_style():
         <style>
         .main { background-color: #f8f9fa; }
         h1, h2, h3 { color: #ff6f0f; font-weight: 800; } 
-        .metric-card {
+        
+        /* 금융 정보 카드 */
+        .finance-box {
             background-color: white; padding: 15px; border-radius: 10px;
-            box-shadow: 1px 1px 5px rgba(0,0,0,0.1); text-align: center;
-            color: black !important; margin-bottom: 10px;
+            box-shadow: 1px 1px 3px rgba(0,0,0,0.1); text-align: center; margin-bottom: 10px;
         }
+        .finance-title { font-size: 0.9rem; color: #666; font-weight: bold; }
+        .finance-val { font-size: 1.5rem; font-weight: bold; color: #333; }
+        .finance-change { font-size: 1rem; font-weight: bold; }
+        
+        /* 뉴스 스타일 */
         .news-box { background-color: white; padding: 15px; border-radius: 10px; border-left: 5px solid #ff6f0f; margin-bottom: 20px; }
         .news-item { padding: 8px 0; border-bottom: 1px solid #eee; }
         .news-item a { text-decoration: none; color: #333; font-weight: bold; font-size: 1rem; }
+        .news-item a:hover { color: #ff6f0f; }
+        
         .stButton>button { 
             background-color: #ff6f0f; color: white; border-radius: 8px; 
             font-weight: bold; width: 100%; height: 45px; border: none;
         }
         .stButton>button:hover { background-color: #e65c00; }
+        
+        /* 기타 박스들 */
+        .metric-card { background-color: white; padding: 15px; border-radius: 10px; text-align: center; margin-bottom: 10px; }
         .event-box { background-color: #1e3932; color: white; padding: 20px; border-radius: 10px; text-align: center; margin-bottom: 20px; }
         .fire-info-box { background-color: #fff3cd; padding: 20px; border-radius: 10px; border: 2px solid #ffc107; text-align: center; margin-bottom: 20px; }
         .fire-emoji { font-size: 3rem; }
-        .fire-title { font-weight: bold; font-size: 1.2rem; margin: 10px 0; }
-        .fire-desc { font-size: 0.9rem; color: #555; }
-        .login-box { max-width: 400px; margin: 0 auto; padding: 40px; background-color: white; border-radius: 20px; box-shadow: 0px 4px 12px rgba(0,0,0,0.1); text-align: center; }
-        .real-data-badge { background-color: #d4edda; color: #155724; padding: 5px 10px; border-radius: 15px; font-size: 0.8rem; font-weight: bold; }
-        .sim-data-badge { background-color: #f8d7da; color: #721c24; padding: 5px 10px; border-radius: 15px; font-size: 0.8rem; font-weight: bold; }
+        .login-box { max-width: 400px; margin: 0 auto; padding: 40px; background-color: white; border-radius: 20px; text-align: center; }
         </style>
     """, unsafe_allow_html=True)
 
@@ -77,60 +84,64 @@ def send_email_safe(name, phone, client_email, req_text, type_tag):
     except Exception as e: return False, str(e)
 
 # -----------------------------------------------------------------------------
-# [기능 3] 데이터 엔진 (크롤링 + API)
+# [기능 3] 데이터 엔진 (금융, 뉴스, 운세)
 # -----------------------------------------------------------------------------
-def get_real_google_news():
+
+# 1. 금융 데이터 (야후 파이낸스) - 캐싱 적용 (10분마다 갱신)
+@st.cache_data(ttl=600)
+def get_finance_data():
     try:
-        url = "https://news.google.com/rss/search?q=소상공인+자영업+지원금&hl=ko&gl=KR&ceid=KR:ko"
+        # 코스피(^KS11), 나스닥(^IXIC), 원달러환율(KRW=X)
+        tickers = {
+            'KOSPI': '^KS11',
+            'NASDAQ': '^IXIC',
+            'USD/KRW': 'KRW=X'
+        }
+        data = {}
+        for name, symbol in tickers.items():
+            ticker = yf.Ticker(symbol)
+            # 최근 2일치 데이터 가져오기 (전일비 계산용)
+            hist = ticker.history(period="2d")
+            if len(hist) >= 1:
+                current = hist['Close'].iloc[-1]
+                # 전일 데이터가 있으면 등락폭 계산, 없으면 0
+                prev = hist['Close'].iloc[-2] if len(hist) > 1 else current
+                change = current - prev
+                change_pct = (change / prev) * 100
+                data[name] = {"price": current, "change": change, "pct": change_pct}
+        return data
+    except:
+        return {}
+
+# 2. 뉴스 데이터 (키워드 최적화)
+def get_real_google_news():
+    # 사장님이 요청하신 키워드 + AI 추천 키워드 조합
+    keywords = [
+        "소상공인", "자영업", "지원금", "정책", # 기본
+        "세금", "대출금리", "최저임금", # 금융/법률
+        "소비트렌드", "창업", "폐업" # 트렌드
+    ]
+    # 검색 쿼리 생성 (OR 조건으로 풍부하게)
+    query = "+OR+".join(keywords)
+    url = f"https://news.google.com/rss/search?q={query}&hl=ko&gl=KR&ceid=KR:ko"
+    
+    try:
         feed = feedparser.parse(url)
-        return feed.entries[:3]
+        return feed.entries[:10] # 10개만 반환
     except: return []
 
-# 🔥 [핵심] 실제 농산물 도매가 크롤링 함수
-def get_real_agri_price():
-    # 오늘 날짜 구하기 (YYYY-MM-DD)
-    today_str = datetime.now().strftime("%Y-%m-%d")
-    
-    # 사장님이 주신 URL (날짜만 오늘 걸로 교체)
-    url = f"https://at.agromarket.kr/domeinfo/sanRealtime.do?saledate={today_str}&pageSize=5&dCostSort=DESC"
-    
-    try:
-        response = requests.get(url, timeout=3)
-        if response.status_code == 200:
-            soup = BeautifulSoup(response.text, 'html.parser')
-            # 테이블 행(tr) 찾기
-            rows = soup.select("tbody tr")
-            
-            real_data = []
-            for row in rows:
-                cols = row.find_all("td")
-                if len(cols) > 5:
-                    # 사이트 구조: 품목, 품종, 시장명, 거래가격 등
-                    item_name = cols[2].text.strip() # 품목
-                    market = cols[4].text.strip() # 시장
-                    price = cols[8].text.strip() # 가격
-                    real_data.append({"item": item_name, "market": market, "price": price})
-            
-            if real_data:
-                return real_data, True # 성공, 진짜데이터
-    except:
-        pass
-    
-    # 실패 시 시뮬레이션 데이터 반환
-    random.seed(datetime.now().strftime("%Y%m%d"))
-    sim_data = [
-        {"item": "배추(10kg)", "market": "가락시장", "price": f"{random.randint(8000,12000):,}"},
-        {"item": "무(20kg)", "market": "강서시장", "price": f"{random.randint(12000,18000):,}"},
-        {"item": "양파(15kg)", "market": "구리시장", "price": f"{random.randint(15000,20000):,}"},
-    ]
-    return sim_data, False # 실패, 시뮬레이션
-
 def get_today_fortune():
-    fortunes = ["귀인 만날 운세", "금전운 최고", "지출 조심", "아이디어 폭발", "건강 챙기기"]
+    fortunes = [
+        "오늘은 귀인을 만날 운세입니다. 첫 손님에게 최선을 다하세요!",
+        "금전운이 매우 좋습니다. 재고가 부족할 수 있으니 미리 챙기세요.",
+        "예상치 못한 지출이 생길 수 있습니다. 꼼꼼히 체크하세요.",
+        "경쟁자보다 앞서 나가는 아이디어가 떠오르는 날입니다.",
+        "건강이 재산입니다. 오늘은 무리하지 말고 일찍 마감해보세요."
+    ]
     random.seed(datetime.now().day)
     return random.choice(fortunes)
 
-# 출퇴근부 로직
+# 출퇴근부
 def get_csv_filename():
     safe_name = "".join([c for c in st.session_state.store_name if c.isalnum()])
     return f"log_{safe_name}.csv"
@@ -153,7 +164,7 @@ set_style()
 if 'logged_in' not in st.session_state: st.session_state.logged_in = False
 if 'store_name' not in st.session_state: st.session_state.store_name = ""
 
-# 로그인 화면
+# 로그인
 if not st.session_state.logged_in:
     st.markdown("<br><br>", unsafe_allow_html=True)
     c1, c2, c3 = st.columns([1, 2, 1])
@@ -182,9 +193,11 @@ st.caption(f"오늘 날짜: {datetime.now().strftime('%Y년 %m월 %d일')}")
 
 tab1, tab2, tab3, tab4 = st.tabs(["🏠 데일리 홈", "🔍 전국 당근검색", "⏰ 직원 출퇴근", "🔥 화재보험 점검"])
 
-# [TAB 1] 데일리 홈 (실시간 데이터 적용)
+# [TAB 1] 데일리 홈 (금융 + 뉴스 + 계산기)
 with tab1:
-    st.subheader("📰 실시간 사장님 뉴스")
+    # 1. 상단: 뉴스 (10개)
+    st.subheader("📰 오늘의 사장님 필수 뉴스")
+    st.caption("키워드: 소상공인, 지원금, 정책, 세금, 대출, 트렌드")
     news_list = get_real_google_news()
     if news_list:
         with st.container():
@@ -196,37 +209,35 @@ with tab1:
 
     st.markdown("---")
     col_left, col_right = st.columns(2)
+    
+    # [왼쪽] 운세 + 금융 지표
     with col_left:
-        st.subheader("🍀 오늘의 운세")
-        st.success(get_today_fortune())
+        st.subheader("🍀 오늘의 장사 운세")
+        st.success(f"Today: {get_today_fortune()}")
         
         st.markdown("<br>", unsafe_allow_html=True)
-        st.subheader("🥬 실시간 경매 시세")
+        st.subheader("📉 주요 경제 지표")
         
-        # 실시간 데이터 호출
-        agri_list, is_real = get_real_agri_price()
-        
-        if is_real:
-            st.markdown("<span class='real-data-badge'>🟢 실시간 데이터 (농넷 제공)</span>", unsafe_allow_html=True)
+        finance = get_finance_data()
+        if finance:
+            for name, data in finance.items():
+                color = "red" if data['change'] > 0 else "blue"
+                sign = "▲" if data['change'] > 0 else "▼"
+                st.markdown(f"""
+                <div class='finance-box'>
+                    <div class='finance-title'>{name}</div>
+                    <div class='finance-val'>{data['price']:,.2f}</div>
+                    <div class='finance-change' style='color:{color};'>
+                        {sign} {abs(data['change']):.2f} ({data['pct']:.2f}%)
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
         else:
-            st.markdown("<span class='sim-data-badge'>🟠 시뮬레이션 데이터 (서버 연결 지연)</span>", unsafe_allow_html=True)
-            
-        st.markdown("<br>", unsafe_allow_html=True)
-        
-        # 테이블 형태로 출력
-        if agri_list:
-            df_agri = pd.DataFrame(agri_list)
-            df_agri.columns = ["품목", "시장", "거래가"]
-            st.dataframe(df_agri, hide_index=True, use_container_width=True)
-            
-        if not is_real:
-            st.caption("※ 현재 경매 정보 수신이 지연되어, AI 예측값을 보여드립니다.")
-        
-        # 출처 링크 제공
-        st.markdown("<a href='https://at.agromarket.kr/domeinfo/sanRealtime.do' target='_blank'>👉 농넷(농산물유통정보) 원문 보기</a>", unsafe_allow_html=True)
+            st.info("금융 데이터를 불러오는 중...")
 
+    # [오른쪽] 스마트 매출 계산기
     with col_right:
-        st.subheader("🧮 스마트 매출 계산기")
+        st.subheader("🧮 오늘의 목표 매출")
         st.markdown("""<div class='metric-card'>고정비를 입력하면 <b>오늘 목표치</b>를 계산해드립니다.</div>""", unsafe_allow_html=True)
         c1, c2 = st.columns(2)
         month_fixed = c1.number_input("월 고정비 합계", value=4500000, step=10000)
@@ -264,14 +275,12 @@ with tab3:
     df_log = load_attendance()
     if not df_log.empty: st.dataframe(df_log, use_container_width=True)
 
-# [TAB 4] 화재보험 (그림 설명 & 배상책임 경고)
+# [TAB 4] 화재보험
 with tab4:
     st.markdown("""<div class='event-box'><h2>☕ 스타벅스 100% 증정</h2><b>"상담만 받아도 조건 없이 드립니다!"</b></div>""", unsafe_allow_html=True)
     st.header("🔥 우리 가게 안전 점검")
-    
-    # 이모지 그림 설명
     c1, c2, c3 = st.columns(3)
-    with c1: st.markdown("""<div class='fire-info-box'><span class='fire-emoji'>🔥</span><div class='fire-title'>화재 발생 시</div><div class='fire-desc'>건물주 보험은 보상해주지 않습니다.</div></div>""", unsafe_allow_html=True)
+    with c1: st.markdown("""<div class='fire-info-box'><span class='fire-emoji'>🔥</span><div class='fire-title'>내 가게가 탈 때</div><div class='fire-desc'>건물주 보험은 보상해주지 않습니다.</div></div>""", unsafe_allow_html=True)
     with c2: st.markdown("""<div class='fire-info-box'><span class='fire-emoji'>🏘️</span><div class='fire-title'>옆 가게 피해</div><div class='fire-desc'>옮겨붙은 불 피해도 다 물어줘야 합니다.</div></div>""", unsafe_allow_html=True)
     with c3: st.markdown("""<div class='fire-info-box'><span class='fire-emoji'>🤕</span><div class='fire-title'>손님 부상</div><div class='fire-desc'>치료비, 합의금 모두 사장님 책임입니다.</div></div>""", unsafe_allow_html=True)
 
@@ -280,7 +289,6 @@ with tab4:
     c1, c2 = st.columns(2)
     curr = c1.number_input("현재 월 보험료", value=50000)
     size = c2.number_input("매장 평수", value=20)
-    
     st.markdown("<br><b>'시설물배상책임보험' 가입 여부</b>", unsafe_allow_html=True)
     liab_check = st.radio("배상책임 여부", ["네, 가입했습니다.", "아니요 / 잘 모르겠습니다."], label_visibility="collapsed")
 
@@ -289,7 +297,6 @@ with tab4:
         diff = curr - std
         if diff > 15000: st.error(f"🚨 보험료 {diff:,}원 과다 지출 의심!")
         else: st.success("✅ 보험료는 적정합니다.")
-            
         if liab_check == "아니요 / 잘 모르겠습니다.":
             st.markdown("""<div style='background-color:#fff3cd; padding:20px; border-radius:10px; border:2px solid red; margin-top:20px;'><h3 style='color:red;'>🚨 [긴급 경고] 배상책임 미가입 위험!</h3><b>손님이 매장에서 다치면 큰일 납니다.</b> 즉시 확인이 필요합니다.</div>""", unsafe_allow_html=True)
 
