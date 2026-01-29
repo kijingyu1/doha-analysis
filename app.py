@@ -15,7 +15,7 @@ from email.mime.text import MIMEText # 메일 본문 작성 모듈
 # [0] 페이지 설정
 # -----------------------------------------------------------------------------
 st.set_page_config(
-    page_title="DOHA ANALYSIS (Beta)",
+    page_title="간단 상권분석기 (Beta)",
     page_icon="🏙️",
     layout="wide",
     initial_sidebar_state="collapsed"
