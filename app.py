@@ -28,12 +28,12 @@ def set_style():
         <style>
         .main { background-color: #f8f9fa; }
         
-        /* 타이틀 스타일 커스텀 */
+        /* 타이틀 스타일 */
         h1 { color: #ff6f0f; font-weight: 800; line-height: 1.2; }
         .store-subtitle { color: #333; font-size: 1.5rem; font-weight: bold; margin-top: 5px; }
-        
         h2, h3 { color: #ff6f0f; font-weight: 800; } 
         
+        /* 박스 스타일 */
         .finance-box { background-color: white; padding: 10px; border-radius: 10px; box-shadow: 1px 1px 3px rgba(0,0,0,0.1); text-align: center; margin-bottom: 8px; }
         .finance-title { font-size: 0.8rem; color: #666; font-weight: bold; }
         .finance-val { font-size: 1.1rem; font-weight: bold; color: #333; }
@@ -43,6 +43,7 @@ def set_style():
         .news-item { padding: 8px 0; border-bottom: 1px solid #eee; }
         .news-item a { text-decoration: none; color: #333; font-weight: bold; font-size: 1rem; }
         .news-date { font-size: 0.8rem; color: #ff6f0f; margin-left: 5px; }
+        .news-update-time { font-size: 0.8rem; color: #888; text-align: right; margin-top: 5px; }
         
         .stButton>button { background-color: #ff6f0f; color: white; border-radius: 8px; font-weight: bold; width: 100%; height: 45px; border: none; }
         .stButton>button:hover { background-color: #e65c00; }
@@ -55,9 +56,14 @@ def set_style():
         .install-guide { background-color: #e3f2fd; padding: 15px; border-radius: 10px; border: 1px solid #90caf9; margin-bottom: 15px; color: #0d47a1; font-size: 0.9rem; }
         .visitor-badge { background-color: #333; color: #00ff00; padding: 10px; border-radius: 5px; font-family: 'Courier New', monospace; text-align: center; font-weight: bold; margin-top: 20px; }
         
-        .dj-card { background-color: #2b2b2b; color: white; padding: 15px; border-radius: 10px; border-left: 5px solid #00ff00; margin-bottom: 10px; }
-        .dj-name { color: #00ff00; font-weight: bold; font-size: 1.1rem; }
-        .dj-comment { color: #ddd; font-size: 0.9rem; margin-top: 5px; }
+        /* 라디오 버튼 스타일 */
+        .radio-link-btn {
+            display: block; width: 100%; padding: 15px; margin-bottom: 10px;
+            background-color: #f1f3f5; border: 1px solid #ddd; border-radius: 10px;
+            text-align: center; color: #333; text-decoration: none; font-weight: bold;
+            transition: 0.3s;
+        }
+        .radio-link-btn:hover { background-color: #e9ecef; border-color: #ff6f0f; color: #ff6f0f; }
         
         /* 장부 스타일 */
         .ledger-summary { background-color: white; padding: 15px; border-radius: 10px; border: 1px solid #ddd; text-align: center; }
@@ -74,7 +80,7 @@ def send_email_safe(name, phone, client_email, req_text, type_tag):
     sender = st.secrets["smtp"].get("email", "")
     pw = st.secrets["smtp"].get("password", "")
     store = st.session_state.get('store_name', '미로그인')
-    subject = f"📻 [라디오/비서] {name}님 {type_tag} ({store})"
+    subject = f"🔔 [사장님 비서] {name}님 {type_tag} ({store})"
     body = f"매장: {store}\n이름: {name}\n연락처: {phone}\n내용: {req_text}"
     msg = MIMEText(body)
     msg['Subject'] = subject
@@ -110,6 +116,8 @@ def get_finance_data():
         return data
     except: return {}
 
+# [뉴스] 1시간(3600초)마다 갱신 -> 9,12,18,21시 커버 가능
+@st.cache_data(ttl=3600)
 def get_real_google_news():
     keywords = ["소상공인", "자영업", "지원금", "정책", "세금", "창업", "폐업"]
     query = "+OR+".join(keywords)
@@ -147,28 +155,11 @@ def get_visitor_count():
         except: return 0, pd.DataFrame()
     return 0, pd.DataFrame()
 
-STATION_FILE = "station_list.csv"
-def load_stations():
-    if os.path.exists(STATION_FILE): return pd.read_csv(STATION_FILE)
-    return pd.DataFrame({
-        "store_name": ["DOHA 공식 방송", "퇴근길 호프집"],
-        "url": ["https://www.youtube.com/watch?v=TesYp2sO1IA", "https://www.youtube.com/watch?v=1b-3zbwgq1g"],
-        "comment": ["활기찬 하루를 위한 트로트 믹스!", "오늘도 고생하셨습니다."]
-    })
-def save_station(url, comment):
-    df = load_stations()
-    new_row = {"store_name": st.session_state.store_name, "url": url, "comment": comment}
-    df = pd.concat([pd.DataFrame([new_row]), df], ignore_index=True)
-    df.to_csv(STATION_FILE, index=False)
-    return df
-
-# [NEW] 장부(Ledger) 관리 로직
+# 장부(Ledger)
 LEDGER_FILE = "ledger_data.csv"
 def load_ledger():
-    if os.path.exists(LEDGER_FILE):
-        return pd.read_csv(LEDGER_FILE)
-    return pd.DataFrame(columns=["날짜", "구분", "항목", "금액", "메모"]) # 구분: 매출/지출
-
+    if os.path.exists(LEDGER_FILE): return pd.read_csv(LEDGER_FILE)
+    return pd.DataFrame(columns=["날짜", "구분", "항목", "금액", "메모"]) 
 def save_ledger(date, type_, item, amount, memo):
     df = load_ledger()
     new_row = {"날짜": date, "구분": type_, "항목": item, "금액": amount, "메모": memo}
@@ -206,7 +197,7 @@ if not st.session_state.logged_in:
     st.markdown("<br><br>", unsafe_allow_html=True)
     c1, c2, c3 = st.columns([1, 2, 1])
     with c2:
-        # 여기에 사장님 이미지 URL 넣기
+        # 사장님 로고 URL (아까 알려드린 postimages 주소 넣는 곳)
         LOGO_URL = "https://cdn-icons-png.flaticon.com/512/1995/1995515.png" 
         st.markdown(f"""<div class='login-box'><img src='{LOGO_URL}' style='width: 150px; margin-bottom: 20px; border-radius: 20px;'><p style='font-size: 1.1rem; font-weight: bold; color: #555;'>로그인</p></div>""", unsafe_allow_html=True)
         with st.expander("📲 카톡에서 들어오셨나요?"):
@@ -233,14 +224,13 @@ with st.sidebar:
 st.markdown(f"""<h1>🥕 사장님 비서<br><span class='store-subtitle'>({st.session_state.store_name})</span></h1>""", unsafe_allow_html=True)
 st.markdown("""<div class='install-guide'><b>💡 꿀팁:</b> 카톡 말고 <b>[다른 브라우저로 열기]</b> 후 <b>[홈 화면에 추가]</b> 하세요!</div>""", unsafe_allow_html=True)
 
-# 탭 구성 (장부 추가)
-tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["🏠 데일리 홈", "🔍 전국 당근검색", "⏰ 직원 출퇴근", "🔥 화재보험 점검", "📻 우리들의 방송국", "📒 사장님 장부"])
+tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["🏠 데일리 홈", "🔍 전국 당근검색", "⏰ 직원 출퇴근", "🔥 화재보험 점검", "📻 실시간 라디오", "📒 사장님 장부"])
 
-# ... (Tab 1 ~ Tab 5 기존 코드 유지 - 생략 없이 복붙 필요 시 말씀해주세요) ...
-# (편의를 위해 Tab 1~5 코드는 위와 동일하다고 가정하고, Tab 6만 추가합니다.)
-
+# [TAB 1] 데일리 홈
 with tab1:
     st.subheader("📰 오늘의 사장님 필수 뉴스")
+    st.caption("※ 매일 09시, 12시, 18시, 21시 자동 업데이트")
+    
     news_list = get_real_google_news()
     if news_list:
         with st.container():
@@ -249,6 +239,10 @@ with tab1:
                 date_str = f"{news.published_parsed.tm_mon}/{news.published_parsed.tm_mday}"
                 st.markdown(f"<div class='news-item'><span style='color:#ff6f0f;'>●</span> <a href='{news.link}' target='_blank'>{news.title}</a> <span class='news-date'>{date_str}</span></div>", unsafe_allow_html=True)
             st.markdown("</div>", unsafe_allow_html=True)
+            # 최근 갱신 시간 표시
+            now_str = datetime.now().strftime("%H시 %M분")
+            st.markdown(f"<div class='news-update-time'>최근 갱신: {now_str} 기준</div>", unsafe_allow_html=True)
+            
     st.markdown("---")
     col_left, col_right = st.columns(2)
     with col_left:
@@ -331,95 +325,78 @@ with tab4:
                 else: st.error(m)
             else: st.warning("정보를 입력하세요.")
 
+# =============================================================================
+# [TAB 5] 📻 실시간 라디오 (전면 개편)
+# =============================================================================
 with tab5:
-    st.header("📻 우리들의 방송국 (Open DJ)")
-    st.info("누구나 **DJ**가 되어 음악을 틀 수 있습니다.")
-    st.subheader("📡 현재 송출 중인 방송")
-    df_stations = load_stations()
-    station_names = df_stations['store_name'].tolist()
-    choice = st.selectbox("어느 방송을 들을까요?", station_names)
-    selected_row = df_stations[df_stations['store_name'] == choice].iloc[0]
-    st.markdown(f"""<div class='dj-card'><div class='dj-name'>🎧 DJ: {selected_row['store_name']}</div><div class='dj-comment'>💬 {selected_row['comment']}</div></div>""", unsafe_allow_html=True)
-    try: st.video(selected_row['url'])
-    except: st.error("영상을 불러올 수 없습니다.")
+    st.header("📻 실시간 공중파 라디오")
+    st.info("뉴스, 음악, 교통정보를 실시간으로 들어보세요.")
+    
+    # 1. 앱 내에서 바로 재생 가능한 채널 (유튜브 임베드 지원 채널)
+    st.subheader("▶ 바로 듣기 (뉴스/음악)")
+    
+    radio_type = st.radio("채널 선택", ["YTN 라디오 (24시간 뉴스)", "TBS 교통방송 (김어준X)", "KBS Cool FM (보이는 라디오/음악)", "재즈/팝 음악방송 (광고X)"], horizontal=True)
+    
+    if radio_type == "YTN 라디오 (24시간 뉴스)":
+        st.video("https://www.youtube.com/watch?v=GoXFbC1i1bw") # YTN 실시간
+    elif radio_type == "TBS 교통방송 (김어준X)":
+        st.video("https://www.youtube.com/watch?v=Eqi9C5YQG6E") # TBS 실시간
+    elif radio_type == "KBS Cool FM (보이는 라디오/음악)":
+        st.video("https://www.youtube.com/watch?v=p4M-jO4n62w") # KBS Cool FM (링크 변동 가능성 있음)
+    elif radio_type == "재즈/팝 음악방송 (광고X)":
+        st.video("https://www.youtube.com/watch?v=5qap5aO4i9A") # Lofi Girl (저작권 안전)
+        
     st.markdown("---")
-    with st.expander("🎙️ 나도 DJ 신청하기"):
-        with st.form("dj_form"):
-            dj_url = st.text_input("유튜브 링크")
-            dj_comment = st.text_input("청취자들에게 한마디")
-            if st.form_submit_button("📡 내 방송국 등록"):
-                if dj_url and dj_comment:
-                    save_station(dj_url, dj_comment)
-                    st.success("등록 완료!"); st.rerun()
-                else: st.warning("내용을 입력해주세요.")
+    
+    # 2. 메이저 방송사 연결 (저작권 때문에 링크로 연결)
+    st.subheader("📡 메이저 방송사 연결 (SBS/MBC)")
+    st.caption("※ SBS, MBC는 정책상 앱 내 재생이 불가하여, 공식 플레이어를 띄워드립니다.")
+    
+    c1, c2 = st.columns(2)
+    with c1:
+        st.markdown("<a href='https://w3.sbs.co.kr/radio/gorealraMain.do' target='_blank' class='radio-link-btn'>🦍 SBS 고릴라 (파워FM/러브FM)</a>", unsafe_allow_html=True)
+    with c2:
+        st.markdown("<a href='https://mini.imbc.com/webapp_v3/mini.html' target='_blank' class='radio-link-btn'>Ⓜ️ MBC 미니 (표준FM/FM4U)</a>", unsafe_allow_html=True)
 
-# =============================================================================
-# [TAB 6] 📒 사장님 장부 (NEW!)
-# =============================================================================
 with tab6:
     st.header("📒 사장님 간편 장부")
     st.caption("복잡한 기능은 뺐습니다. **입력하고, 조회하고, 엑셀로 받으세요.**")
     
-    # 1. 입력 폼
     with st.expander("✏️ 수입/지출 입력하기 (클릭)", expanded=False):
         with st.form("ledger_input"):
             c1, c2 = st.columns(2)
             l_date = c1.date_input("날짜", datetime.now())
             l_type = c2.selectbox("구분", ["매출 (수입)", "지출 (비용)"])
-            
             c3, c4 = st.columns(2)
-            l_item = c3.text_input("항목 (예: 식자재, 점심매출)", placeholder="직접 입력")
+            l_item = c3.text_input("항목 (예: 식자재)", placeholder="직접 입력")
             l_amount = c4.number_input("금액", step=1000)
-            
-            l_memo = st.text_input("메모 (선택사항)", placeholder="특이사항 기록")
-            
+            l_memo = st.text_input("메모", placeholder="특이사항")
             if st.form_submit_button("💾 장부에 저장"):
                 if l_item and l_amount > 0:
                     save_ledger(l_date, l_type, l_item, l_amount, l_memo)
-                    st.success("저장되었습니다.")
-                    st.rerun()
-                else:
-                    st.warning("항목과 금액을 확인해주세요.")
+                    st.success("저장되었습니다."); st.rerun()
+                else: st.warning("항목과 금액을 확인해주세요.")
     
     st.markdown("---")
-    
-    # 2. 조회 및 필터
     st.subheader("🔍 장부 조회 & 엑셀 다운로드")
-    
     df_ledger = load_ledger()
-    
     if not df_ledger.empty:
-        # 필터링 기능
         c1, c2, c3 = st.columns([2, 1, 1])
         search_txt = c1.text_input("검색어 (항목, 메모)", placeholder="예: 식자재")
-        
-        # 데이터프레임 필터링
         mask = df_ledger.apply(lambda x: search_txt in str(x['항목']) or search_txt in str(x['메모']), axis=1)
         df_filtered = df_ledger[mask]
         
-        # 통계 계산
         total_income = df_filtered[df_filtered['구분'] == "매출 (수입)"]['금액'].sum()
         total_expense = df_filtered[df_filtered['구분'] == "지출 (비용)"]['금액'].sum()
         net_profit = total_income - total_expense
         
-        # 통계 대시보드
         c_a, c_b, c_c = st.columns(3)
         c_a.markdown(f"<div class='ledger-summary'><div class='ledger-label'>총 매출</div><div class='ledger-val' style='color:blue;'>{total_income:,}원</div></div>", unsafe_allow_html=True)
         c_b.markdown(f"<div class='ledger-summary'><div class='ledger-label'>총 지출</div><div class='ledger-val' style='color:red;'>{total_expense:,}원</div></div>", unsafe_allow_html=True)
         c_c.markdown(f"<div class='ledger-summary'><div class='ledger-label'>순이익</div><div class='ledger-val'>{net_profit:,}원</div></div>", unsafe_allow_html=True)
         
         st.markdown("<br>", unsafe_allow_html=True)
-        
-        # 장부 리스트 표시
         st.dataframe(df_filtered, use_container_width=True, hide_index=True)
-        
-        # 엑셀 다운로드 버튼
         csv = df_filtered.to_csv(index=False).encode('utf-8-sig')
-        st.download_button(
-            label="📥 엑셀(CSV)로 내보내기",
-            data=csv,
-            file_name=f"사장님장부_{datetime.now().strftime('%Y%m%d')}.csv",
-            mime='text/csv',
-        )
-    else:
-        st.info("아직 작성된 장부가 없습니다. 위에서 입력해보세요!")
+        st.download_button(label="📥 엑셀(CSV)로 내보내기", data=csv, file_name=f"사장님장부_{datetime.now().strftime('%Y%m%d')}.csv", mime='text/csv')
+    else: st.info("작성된 장부가 없습니다.")
