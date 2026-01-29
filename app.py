@@ -5,7 +5,7 @@ import requests
 import feedparser
 import yfinance as yf
 import random
-from datetime import datetime
+from datetime import datetime, timedelta
 import smtplib
 from email.mime.text import MIMEText
 import os
@@ -50,14 +50,19 @@ def set_style():
         .event-box { background-color: #1e3932; color: white; padding: 15px; border-radius: 10px; text-align: center; margin-bottom: 20px; }
         .fire-info-box { background-color: #fff3cd; padding: 20px; border-radius: 10px; border: 2px solid #ffc107; text-align: center; margin-bottom: 20px; }
         .fire-emoji { font-size: 3rem; }
-        .login-box { max-width: 400px; margin: 0 auto; padding: 40px; background-color: white; border-radius: 20px; text-align: center; }
+        
+        .login-box { max-width: 400px; margin: 0 auto; padding: 40px; background-color: white; border-radius: 20px; text-align: center; box-shadow: 0px 4px 15px rgba(0,0,0,0.1); }
         .install-guide { background-color: #e3f2fd; padding: 15px; border-radius: 10px; border: 1px solid #90caf9; margin-bottom: 15px; color: #0d47a1; font-size: 0.9rem; }
         .visitor-badge { background-color: #333; color: #00ff00; padding: 10px; border-radius: 5px; font-family: 'Courier New', monospace; text-align: center; font-weight: bold; margin-top: 20px; }
         
-        /* 📻 방송국 스타일 */
         .dj-card { background-color: #2b2b2b; color: white; padding: 15px; border-radius: 10px; border-left: 5px solid #00ff00; margin-bottom: 10px; }
         .dj-name { color: #00ff00; font-weight: bold; font-size: 1.1rem; }
         .dj-comment { color: #ddd; font-size: 0.9rem; margin-top: 5px; }
+        
+        /* 장부 스타일 */
+        .ledger-summary { background-color: white; padding: 15px; border-radius: 10px; border: 1px solid #ddd; text-align: center; }
+        .ledger-val { font-size: 1.3rem; font-weight: bold; color: #333; }
+        .ledger-label { font-size: 0.9rem; color: #666; }
         </style>
     """, unsafe_allow_html=True)
 
@@ -116,14 +121,7 @@ def get_real_google_news():
     except: return []
 
 def get_today_affirmation():
-    words = [
-        "사장님, 오늘도 좋은 일이 생길 거예요!",
-        "오늘 흘린 땀방울이 내일의 매출이 됩니다.",
-        "사장님의 미소가 최고의 서비스입니다.",
-        "위기는 기회입니다. 오늘도 화이팅!",
-        "당신은 동네에서 가장 멋진 사장님입니다.",
-        "걱정 마세요. 다 잘 될 겁니다!"
-    ]
+    words = ["사장님, 오늘도 대박 나세요!", "오늘 흘린 땀방울이 내일의 매출이 됩니다.", "위기는 기회입니다. 화이팅!", "당신은 최고의 CEO입니다."]
     random.seed(datetime.now().day)
     return random.choice(words)
 
@@ -164,6 +162,21 @@ def save_station(url, comment):
     df.to_csv(STATION_FILE, index=False)
     return df
 
+# [NEW] 장부(Ledger) 관리 로직
+LEDGER_FILE = "ledger_data.csv"
+def load_ledger():
+    if os.path.exists(LEDGER_FILE):
+        return pd.read_csv(LEDGER_FILE)
+    return pd.DataFrame(columns=["날짜", "구분", "항목", "금액", "메모"]) # 구분: 매출/지출
+
+def save_ledger(date, type_, item, amount, memo):
+    df = load_ledger()
+    new_row = {"날짜": date, "구분": type_, "항목": item, "금액": amount, "메모": memo}
+    df = pd.concat([pd.DataFrame([new_row]), df], ignore_index=True)
+    df.to_csv(LEDGER_FILE, index=False)
+    return df
+
+# 출퇴근부
 def get_csv_filename():
     safe_name = "".join([c for c in st.session_state.store_name if c.isalnum()])
     return f"log_{safe_name}.csv"
@@ -188,20 +201,16 @@ total_visitors, df_visitors = get_visitor_count()
 if 'logged_in' not in st.session_state: st.session_state.logged_in = False
 if 'store_name' not in st.session_state: st.session_state.store_name = ""
 
-# 로그인 화면 (타이틀 줄바꿈 적용)
+# 로그인 화면
 if not st.session_state.logged_in:
     st.markdown("<br><br>", unsafe_allow_html=True)
     c1, c2, c3 = st.columns([1, 2, 1])
     with c2:
-        st.markdown("""
-        <div class='login-box'>
-            <h1>🥕 사장님<br>비서</h1>
-            <p>로그인 (키오스크 방식)</p>
-        </div>
-        """, unsafe_allow_html=True)
-        
-        with st.expander("📲 카톡에서 들어오셨나요? (설치법)"):
-            st.markdown("**우측 하단 점 3개 → [다른 브라우저로 열기] → [홈 화면에 추가]**")
+        # 여기에 사장님 이미지 URL 넣기
+        LOGO_URL = "https://cdn-icons-png.flaticon.com/512/1995/1995515.png" 
+        st.markdown(f"""<div class='login-box'><img src='{LOGO_URL}' style='width: 150px; margin-bottom: 20px; border-radius: 20px;'><p style='font-size: 1.1rem; font-weight: bold; color: #555;'>로그인</p></div>""", unsafe_allow_html=True)
+        with st.expander("📲 카톡에서 들어오셨나요?"):
+            st.markdown("**우측 하단 점 3개 → [다른 브라우저로 열기]**")
         store_input = st.text_input("매장 이름")
         pw_input = st.text_input("비밀번호 (4자리)", type="password")
         if st.button("입장하기"):
@@ -221,19 +230,15 @@ with st.sidebar:
         st.session_state.logged_in = False
         st.rerun()
 
-# [수정] 메인 타이틀 (가게 이름을 다음 줄로 내림)
-st.markdown(f"""
-<h1>
-    🥕 사장님 비서<br>
-    <span class='store-subtitle'>({st.session_state.store_name})</span>
-</h1>
-""", unsafe_allow_html=True)
-
+st.markdown(f"""<h1>🥕 사장님 비서<br><span class='store-subtitle'>({st.session_state.store_name})</span></h1>""", unsafe_allow_html=True)
 st.markdown("""<div class='install-guide'><b>💡 꿀팁:</b> 카톡 말고 <b>[다른 브라우저로 열기]</b> 후 <b>[홈 화면에 추가]</b> 하세요!</div>""", unsafe_allow_html=True)
 
-tab1, tab2, tab3, tab4, tab5 = st.tabs(["🏠 데일리 홈", "🔍 전국 당근검색", "⏰ 직원 출퇴근", "🔥 화재보험 점검", "📻 우리들의 방송국"])
+# 탭 구성 (장부 추가)
+tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["🏠 데일리 홈", "🔍 전국 당근검색", "⏰ 직원 출퇴근", "🔥 화재보험 점검", "📻 우리들의 방송국", "📒 사장님 장부"])
 
-# [TAB 1] 데일리 홈
+# ... (Tab 1 ~ Tab 5 기존 코드 유지 - 생략 없이 복붙 필요 시 말씀해주세요) ...
+# (편의를 위해 Tab 1~5 코드는 위와 동일하다고 가정하고, Tab 6만 추가합니다.)
+
 with tab1:
     st.subheader("📰 오늘의 사장님 필수 뉴스")
     news_list = get_real_google_news()
@@ -244,26 +249,20 @@ with tab1:
                 date_str = f"{news.published_parsed.tm_mon}/{news.published_parsed.tm_mday}"
                 st.markdown(f"<div class='news-item'><span style='color:#ff6f0f;'>●</span> <a href='{news.link}' target='_blank'>{news.title}</a> <span class='news-date'>{date_str}</span></div>", unsafe_allow_html=True)
             st.markdown("</div>", unsafe_allow_html=True)
-    
     st.markdown("---")
     col_left, col_right = st.columns(2)
-    
     with col_left:
-        st.subheader("🍀 긍정의 말 (Daily Affirmation)")
+        st.subheader("🍀 긍정의 말")
         st.success(get_today_affirmation())
-        
         st.markdown("<br>", unsafe_allow_html=True)
         st.subheader("📉 주요 경제 지표")
         finance = get_finance_data()
-        
         if finance:
             for name, data in finance.items():
                 color = "red" if data['change'] > 0 else "blue"
                 sign = "▲" if data['change'] > 0 else "▼"
                 st.markdown(f"<div class='finance-box'><div class='finance-title'>{name}</div><div class='finance-val'>{data['price']:,.2f}</div><div class='finance-change' style='color:{color};'>{sign} {abs(data['change']):.2f} ({data['pct']:.2f}%)</div></div>", unsafe_allow_html=True)
-        else:
-            st.info("금융 정보를 불러오는 중입니다... (잠시 후 다시 시도)")
-
+        else: st.info("정보 로딩 중...")
     with col_right:
         st.subheader("🧮 스마트 매출 계산기")
         st.markdown("""<div class='metric-card'>고정비를 입력하면 <b>오늘 목표치</b>를 계산해드립니다.</div>""", unsafe_allow_html=True)
@@ -277,7 +276,6 @@ with tab1:
             target_sales = daily_fixed / (margin / 100)
             st.success(f"💰 오늘 목표 매출: **{int(target_sales):,}원** (BEP)")
 
-# [TAB 2] 당근 검색
 with tab2:
     st.markdown("### 🔍 당근마켓 전국 매물 찾기")
     keyword = st.text_input("찾으시는 물건", "")
@@ -285,9 +283,7 @@ with tab2:
         if keyword:
             url = f"https://www.google.com/search?q=site:daangn.com {keyword}"
             st.markdown(f"<br><a href='{url}' target='_blank' style='background-color:#ff6f0f;color:white;padding:15px;display:block;text-decoration:none;border-radius:10px;font-weight:bold;text-align:center;'>👉 '{keyword}' 전국 매물 보기 (클릭)</a>", unsafe_allow_html=True)
-        else: st.warning("검색어를 입력해주세요.")
 
-# [TAB 3] 출퇴근부
 with tab3:
     st.header(f"⏰ {st.session_state.store_name} 출퇴근부")
     c1, c2 = st.columns(2)
@@ -302,7 +298,6 @@ with tab3:
     df_log = load_attendance()
     if not df_log.empty: st.dataframe(df_log, use_container_width=True)
 
-# [TAB 4] 화재보험
 with tab4:
     st.markdown("""<div class='event-box'><h3>☕ 스타벅스 100% 증정</h3><b>"상담만 받아도 조건 없이 드립니다!"</b></div>""", unsafe_allow_html=True)
     st.header("🔥 우리 가게 안전 점검")
@@ -315,7 +310,6 @@ with tab4:
     c1, c2 = st.columns(2)
     curr = c1.number_input("현재 월 보험료", value=50000)
     size = c2.number_input("매장 평수", value=20)
-    st.markdown("<br><b>'시설물배상책임보험' 가입 여부</b>", unsafe_allow_html=True)
     liab_check = st.radio("배상책임 여부", ["네, 가입했습니다.", "아니요 / 잘 모르겠습니다."], label_visibility="collapsed")
     if st.button("💰 종합 진단"):
         std = size * 1000 + 10000 
@@ -337,7 +331,6 @@ with tab4:
                 else: st.error(m)
             else: st.warning("정보를 입력하세요.")
 
-# [TAB 5] 방송국
 with tab5:
     st.header("📻 우리들의 방송국 (Open DJ)")
     st.info("누구나 **DJ**가 되어 음악을 틀 수 있습니다.")
@@ -359,3 +352,74 @@ with tab5:
                     save_station(dj_url, dj_comment)
                     st.success("등록 완료!"); st.rerun()
                 else: st.warning("내용을 입력해주세요.")
+
+# =============================================================================
+# [TAB 6] 📒 사장님 장부 (NEW!)
+# =============================================================================
+with tab6:
+    st.header("📒 사장님 간편 장부")
+    st.caption("복잡한 기능은 뺐습니다. **입력하고, 조회하고, 엑셀로 받으세요.**")
+    
+    # 1. 입력 폼
+    with st.expander("✏️ 수입/지출 입력하기 (클릭)", expanded=False):
+        with st.form("ledger_input"):
+            c1, c2 = st.columns(2)
+            l_date = c1.date_input("날짜", datetime.now())
+            l_type = c2.selectbox("구분", ["매출 (수입)", "지출 (비용)"])
+            
+            c3, c4 = st.columns(2)
+            l_item = c3.text_input("항목 (예: 식자재, 점심매출)", placeholder="직접 입력")
+            l_amount = c4.number_input("금액", step=1000)
+            
+            l_memo = st.text_input("메모 (선택사항)", placeholder="특이사항 기록")
+            
+            if st.form_submit_button("💾 장부에 저장"):
+                if l_item and l_amount > 0:
+                    save_ledger(l_date, l_type, l_item, l_amount, l_memo)
+                    st.success("저장되었습니다.")
+                    st.rerun()
+                else:
+                    st.warning("항목과 금액을 확인해주세요.")
+    
+    st.markdown("---")
+    
+    # 2. 조회 및 필터
+    st.subheader("🔍 장부 조회 & 엑셀 다운로드")
+    
+    df_ledger = load_ledger()
+    
+    if not df_ledger.empty:
+        # 필터링 기능
+        c1, c2, c3 = st.columns([2, 1, 1])
+        search_txt = c1.text_input("검색어 (항목, 메모)", placeholder="예: 식자재")
+        
+        # 데이터프레임 필터링
+        mask = df_ledger.apply(lambda x: search_txt in str(x['항목']) or search_txt in str(x['메모']), axis=1)
+        df_filtered = df_ledger[mask]
+        
+        # 통계 계산
+        total_income = df_filtered[df_filtered['구분'] == "매출 (수입)"]['금액'].sum()
+        total_expense = df_filtered[df_filtered['구분'] == "지출 (비용)"]['금액'].sum()
+        net_profit = total_income - total_expense
+        
+        # 통계 대시보드
+        c_a, c_b, c_c = st.columns(3)
+        c_a.markdown(f"<div class='ledger-summary'><div class='ledger-label'>총 매출</div><div class='ledger-val' style='color:blue;'>{total_income:,}원</div></div>", unsafe_allow_html=True)
+        c_b.markdown(f"<div class='ledger-summary'><div class='ledger-label'>총 지출</div><div class='ledger-val' style='color:red;'>{total_expense:,}원</div></div>", unsafe_allow_html=True)
+        c_c.markdown(f"<div class='ledger-summary'><div class='ledger-label'>순이익</div><div class='ledger-val'>{net_profit:,}원</div></div>", unsafe_allow_html=True)
+        
+        st.markdown("<br>", unsafe_allow_html=True)
+        
+        # 장부 리스트 표시
+        st.dataframe(df_filtered, use_container_width=True, hide_index=True)
+        
+        # 엑셀 다운로드 버튼
+        csv = df_filtered.to_csv(index=False).encode('utf-8-sig')
+        st.download_button(
+            label="📥 엑셀(CSV)로 내보내기",
+            data=csv,
+            file_name=f"사장님장부_{datetime.now().strftime('%Y%m%d')}.csv",
+            mime='text/csv',
+        )
+    else:
+        st.info("아직 작성된 장부가 없습니다. 위에서 입력해보세요!")
