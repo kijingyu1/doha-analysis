@@ -14,7 +14,7 @@ import os
 # [0] 페이지 설정
 # -----------------------------------------------------------------------------
 st.set_page_config(
-    page_title="DOHA 사장님 비서",
+    page_title="사장님 비서",
     page_icon="🥕",
     layout="wide",
     initial_sidebar_state="collapsed"
@@ -28,16 +28,21 @@ def set_style():
         <style>
         .main { background-color: #f8f9fa; }
         h1, h2, h3 { color: #ff6f0f; font-weight: 800; } 
-        .finance-box { background-color: white; padding: 15px; border-radius: 10px; box-shadow: 1px 1px 3px rgba(0,0,0,0.1); text-align: center; margin-bottom: 10px; }
-        .finance-title { font-size: 0.9rem; color: #666; font-weight: bold; }
-        .finance-val { font-size: 1.2rem; font-weight: bold; color: #333; }
-        .finance-change { font-size: 0.9rem; font-weight: bold; }
+        
+        .finance-box { background-color: white; padding: 10px; border-radius: 10px; box-shadow: 1px 1px 3px rgba(0,0,0,0.1); text-align: center; margin-bottom: 8px; }
+        .finance-title { font-size: 0.8rem; color: #666; font-weight: bold; }
+        .finance-val { font-size: 1.1rem; font-weight: bold; color: #333; }
+        .finance-change { font-size: 0.8rem; font-weight: bold; }
+        
         .news-box { background-color: white; padding: 15px; border-radius: 10px; border-left: 5px solid #ff6f0f; margin-bottom: 20px; }
         .news-item { padding: 8px 0; border-bottom: 1px solid #eee; }
         .news-item a { text-decoration: none; color: #333; font-weight: bold; font-size: 1rem; }
+        .news-date { font-size: 0.8rem; color: #ff6f0f; margin-left: 5px; }
+        
         .stButton>button { background-color: #ff6f0f; color: white; border-radius: 8px; font-weight: bold; width: 100%; height: 45px; border: none; }
         .stButton>button:hover { background-color: #e65c00; }
-        .event-box { background-color: #1e3932; color: white; padding: 20px; border-radius: 10px; text-align: center; margin-bottom: 20px; }
+        
+        .event-box { background-color: #1e3932; color: white; padding: 15px; border-radius: 10px; text-align: center; margin-bottom: 20px; }
         .fire-info-box { background-color: #fff3cd; padding: 20px; border-radius: 10px; border: 2px solid #ffc107; text-align: center; margin-bottom: 20px; }
         .fire-emoji { font-size: 3rem; }
         .login-box { max-width: 400px; margin: 0 auto; padding: 40px; background-color: white; border-radius: 20px; text-align: center; }
@@ -45,10 +50,7 @@ def set_style():
         .visitor-badge { background-color: #333; color: #00ff00; padding: 10px; border-radius: 5px; font-family: 'Courier New', monospace; text-align: center; font-weight: bold; margin-top: 20px; }
         
         /* 📻 방송국 스타일 */
-        .dj-card {
-            background-color: #2b2b2b; color: white; padding: 15px; border-radius: 10px;
-            border-left: 5px solid #00ff00; margin-bottom: 10px;
-        }
+        .dj-card { background-color: #2b2b2b; color: white; padding: 15px; border-radius: 10px; border-left: 5px solid #00ff00; margin-bottom: 10px; }
         .dj-name { color: #00ff00; font-weight: bold; font-size: 1.1rem; }
         .dj-comment { color: #ddd; font-size: 0.9rem; margin-top: 5px; }
         </style>
@@ -62,7 +64,7 @@ def send_email_safe(name, phone, client_email, req_text, type_tag):
     sender = st.secrets["smtp"].get("email", "")
     pw = st.secrets["smtp"].get("password", "")
     store = st.session_state.get('store_name', '미로그인')
-    subject = f"📻 [DOHA 라디오] {name}님 {type_tag} ({store})"
+    subject = f"📻 [라디오/비서] {name}님 {type_tag} ({store})"
     body = f"매장: {store}\n이름: {name}\n연락처: {phone}\n내용: {req_text}"
     msg = MIMEText(body)
     msg['Subject'] = subject
@@ -77,7 +79,7 @@ def send_email_safe(name, phone, client_email, req_text, type_tag):
     except Exception as e: return False, str(e)
 
 # -----------------------------------------------------------------------------
-# [기능 3] 데이터 엔진 & DJ 스테이션 로직
+# [기능 3] 데이터 엔진
 # -----------------------------------------------------------------------------
 @st.cache_data(ttl=1800)
 def get_finance_data():
@@ -108,10 +110,18 @@ def get_real_google_news():
         return feed.entries[:10]
     except: return []
 
-def get_today_fortune():
-    fortunes = ["귀인 만날 운세!", "금전운 최고!", "지출 조심!", "아이디어 폭발!", "건강 챙기세요!"]
+def get_today_affirmation():
+    # 긍정의 말 (운세 대체)
+    words = [
+        "사장님, 오늘도 좋은 일이 생길 거예요!",
+        "오늘 흘린 땀방울이 내일의 매출이 됩니다.",
+        "사장님의 미소가 최고의 서비스입니다.",
+        "위기는 기회입니다. 오늘도 화이팅!",
+        "당신은 동네에서 가장 멋진 사장님입니다.",
+        "걱정 마세요. 다 잘 될 겁니다!"
+    ]
     random.seed(datetime.now().day)
-    return random.choice(fortunes)
+    return random.choice(words)
 
 VISITOR_FILE = "visitor_log.csv"
 def track_visitor():
@@ -135,26 +145,21 @@ def get_visitor_count():
         except: return 0, pd.DataFrame()
     return 0, pd.DataFrame()
 
-# [NEW] 방송국(DJ) 데이터 관리
 STATION_FILE = "station_list.csv"
 def load_stations():
     if os.path.exists(STATION_FILE): return pd.read_csv(STATION_FILE)
-    # 초기 데이터 (샘플)
     return pd.DataFrame({
         "store_name": ["DOHA 공식 방송", "퇴근길 호프집"],
         "url": ["https://www.youtube.com/watch?v=TesYp2sO1IA", "https://www.youtube.com/watch?v=1b-3zbwgq1g"],
-        "comment": ["활기찬 하루를 위한 트로트 믹스입니다!", "오늘 하루도 고생하셨습니다. 발라드 듣고 가세요."]
+        "comment": ["활기찬 하루를 위한 트로트 믹스!", "오늘도 고생하셨습니다."]
     })
-
 def save_station(url, comment):
     df = load_stations()
     new_row = {"store_name": st.session_state.store_name, "url": url, "comment": comment}
-    # 최신순으로 위로 오게 저장
     df = pd.concat([pd.DataFrame([new_row]), df], ignore_index=True)
     df.to_csv(STATION_FILE, index=False)
     return df
 
-# 출퇴근부
 def get_csv_filename():
     safe_name = "".join([c for c in st.session_state.store_name if c.isalnum()])
     return f"log_{safe_name}.csv"
@@ -184,7 +189,7 @@ if not st.session_state.logged_in:
     st.markdown("<br><br>", unsafe_allow_html=True)
     c1, c2, c3 = st.columns([1, 2, 1])
     with c2:
-        st.markdown("<div class='login-box'><h1>🥕 DOHA 사장님 비서</h1><p>로그인 (키오스크 방식)</p></div>", unsafe_allow_html=True)
+        st.markdown("<div class='login-box'><h1>🥕 사장님 비서</h1><p>로그인 (키오스크 방식)</p></div>", unsafe_allow_html=True)
         with st.expander("📲 카톡에서 들어오셨나요? (설치법)"):
             st.markdown("**우측 하단 점 3개 → [다른 브라우저로 열기] → [홈 화면에 추가]**")
         store_input = st.text_input("매장 이름")
@@ -201,17 +206,18 @@ if not st.session_state.logged_in:
 # 메인
 with st.sidebar:
     st.write(f"👤 **{st.session_state.store_name}**님")
-    st.markdown(f"<div class='visitor-badge'>DOHA VISITORS<br>{total_visitors:,}</div>", unsafe_allow_html=True)
+    st.markdown(f"<div class='visitor-badge'>VISITORS<br>{total_visitors:,}</div>", unsafe_allow_html=True)
     if st.button("로그아웃"):
         st.session_state.logged_in = False
         st.rerun()
 
-st.title(f"🥕 DOHA 사장님 비서 ({st.session_state.store_name})")
+# [수정] 타이틀 글씨 크기 조정 및 DOHA 삭제
+st.title(f"🥕 사장님 비서 ({st.session_state.store_name})")
 st.markdown("""<div class='install-guide'><b>💡 꿀팁:</b> 카톡 말고 <b>[다른 브라우저로 열기]</b> 후 <b>[홈 화면에 추가]</b> 하세요!</div>""", unsafe_allow_html=True)
 
-# 탭 구성
 tab1, tab2, tab3, tab4, tab5 = st.tabs(["🏠 데일리 홈", "🔍 전국 당근검색", "⏰ 직원 출퇴근", "🔥 화재보험 점검", "📻 우리들의 방송국"])
 
+# [TAB 1] 데일리 홈
 with tab1:
     st.subheader("📰 오늘의 사장님 필수 뉴스")
     news_list = get_real_google_news()
@@ -219,22 +225,35 @@ with tab1:
         with st.container():
             st.markdown("<div class='news-box'>", unsafe_allow_html=True)
             for news in news_list:
+                # [수정] 괄호 삭제하고 날짜만 표시
                 date_str = f"{news.published_parsed.tm_mon}/{news.published_parsed.tm_mday}"
-                st.markdown(f"<div class='news-item'><span style='color:#ff6f0f;'>●</span> <a href='{news.link}' target='_blank'>{news.title}</a> <span>({date_str})</span></div>", unsafe_allow_html=True)
+                st.markdown(f"<div class='news-item'><span style='color:#ff6f0f;'>●</span> <a href='{news.link}' target='_blank'>{news.title}</a> <span class='news-date'>{date_str}</span></div>", unsafe_allow_html=True)
             st.markdown("</div>", unsafe_allow_html=True)
+    
     st.markdown("---")
     col_left, col_right = st.columns(2)
+    
+    # [왼쪽] 긍정의 말 + 금융
     with col_left:
-        st.subheader("🍀 오늘의 운세")
-        st.success(f"Today: {get_today_fortune()}")
+        # [수정] 운세 -> 긍정의 말
+        st.subheader("🍀 긍정의 말 (Daily Affirmation)")
+        st.success(get_today_affirmation())
+        
         st.markdown("<br>", unsafe_allow_html=True)
+        # [수정] 코스피 등 금융 지표 복구
         st.subheader("📉 주요 경제 지표")
         finance = get_finance_data()
+        
+        # 금융 데이터가 로딩 중이거나 실패해도 UI가 꺼지지 않도록 처리
         if finance:
             for name, data in finance.items():
                 color = "red" if data['change'] > 0 else "blue"
                 sign = "▲" if data['change'] > 0 else "▼"
                 st.markdown(f"<div class='finance-box'><div class='finance-title'>{name}</div><div class='finance-val'>{data['price']:,.2f}</div><div class='finance-change' style='color:{color};'>{sign} {abs(data['change']):.2f} ({data['pct']:.2f}%)</div></div>", unsafe_allow_html=True)
+        else:
+            # 데이터 로딩 실패 시 보여줄 정적 UI (빈칸 방지)
+            st.info("금융 정보를 불러오는 중입니다... (잠시 후 다시 시도)")
+
     with col_right:
         st.subheader("🧮 스마트 매출 계산기")
         st.markdown("""<div class='metric-card'>고정비를 입력하면 <b>오늘 목표치</b>를 계산해드립니다.</div>""", unsafe_allow_html=True)
@@ -248,8 +267,10 @@ with tab1:
             target_sales = daily_fixed / (margin / 100)
             st.success(f"💰 오늘 목표 매출: **{int(target_sales):,}원** (BEP)")
 
+# [TAB 2] 당근 검색
 with tab2:
-    st.header("🔍 당근마켓 전국 매물 찾기")
+    # [수정] 글씨 크기 작게 (h3)
+    st.markdown("### 🔍 당근마켓 전국 매물 찾기")
     keyword = st.text_input("찾으시는 물건", "")
     if st.button("전국 검색 시작"):
         if keyword:
@@ -257,6 +278,7 @@ with tab2:
             st.markdown(f"<br><a href='{url}' target='_blank' style='background-color:#ff6f0f;color:white;padding:15px;display:block;text-decoration:none;border-radius:10px;font-weight:bold;text-align:center;'>👉 '{keyword}' 전국 매물 보기 (클릭)</a>", unsafe_allow_html=True)
         else: st.warning("검색어를 입력해주세요.")
 
+# [TAB 3] 출퇴근부
 with tab3:
     st.header(f"⏰ {st.session_state.store_name} 출퇴근부")
     c1, c2 = st.columns(2)
@@ -271,8 +293,10 @@ with tab3:
     df_log = load_attendance()
     if not df_log.empty: st.dataframe(df_log, use_container_width=True)
 
+# [TAB 4] 화재보험
 with tab4:
-    st.markdown("""<div class='event-box'><h2>☕ 스타벅스 100% 증정</h2><b>"상담만 받아도 조건 없이 드립니다!"</b></div>""", unsafe_allow_html=True)
+    # [수정] 스타벅스 글씨 크기 작게 (h3)
+    st.markdown("""<div class='event-box'><h3>☕ 스타벅스 100% 증정</h3><b>"상담만 받아도 조건 없이 드립니다!"</b></div>""", unsafe_allow_html=True)
     st.header("🔥 우리 가게 안전 점검")
     c1, c2, c3 = st.columns(3)
     with c1: st.markdown("""<div class='fire-info-box'><span class='fire-emoji'>🔥</span><div class='fire-title'>내 가게가 탈 때</div><div class='fire-desc'>건물주 보험은 보상해주지 않습니다.</div></div>""", unsafe_allow_html=True)
@@ -305,49 +329,25 @@ with tab4:
                 else: st.error(m)
             else: st.warning("정보를 입력하세요.")
 
-# =============================================================================
-# [TAB 5] 📻 우리들의 방송국 (업그레이드)
-# =============================================================================
+# [TAB 5] 방송국
 with tab5:
     st.header("📻 우리들의 방송국 (Open DJ)")
-    st.info("누구나 **DJ**가 되어 음악을 틀 수 있습니다. 오늘은 내가 DJ!")
-    
-    # 1. 방송국 목록 (청취)
+    st.info("누구나 **DJ**가 되어 음악을 틀 수 있습니다.")
     st.subheader("📡 현재 송출 중인 방송")
     df_stations = load_stations()
-    
-    # 방송국 선택
     station_names = df_stations['store_name'].tolist()
     choice = st.selectbox("어느 방송을 들을까요?", station_names)
-    
-    # 선택된 방송 송출
     selected_row = df_stations[df_stations['store_name'] == choice].iloc[0]
-    
-    st.markdown(f"""
-    <div class='dj-card'>
-        <div class='dj-name'>🎧 DJ: {selected_row['store_name']}</div>
-        <div class='dj-comment'>💬 한마디: {selected_row['comment']}</div>
-    </div>
-    """, unsafe_allow_html=True)
-    
-    try:
-        st.video(selected_row['url'])
-    except:
-        st.error("영상을 불러올 수 없습니다.")
-
+    st.markdown(f"""<div class='dj-card'><div class='dj-name'>🎧 DJ: {selected_row['store_name']}</div><div class='dj-comment'>💬 {selected_row['comment']}</div></div>""", unsafe_allow_html=True)
+    try: st.video(selected_row['url'])
+    except: st.error("영상을 불러올 수 없습니다.")
     st.markdown("---")
-    
-    # 2. 내 방송국 만들기 (등록)
-    with st.expander("🎙️ 나도 DJ 신청하기 (방송국 개설)"):
-        st.caption("유튜브 플레이리스트 링크를 넣어주세요.")
+    with st.expander("🎙️ 나도 DJ 신청하기"):
         with st.form("dj_form"):
-            dj_url = st.text_input("유튜브 링크 (URL)", placeholder="https://youtube.com/...")
-            dj_comment = st.text_input("청취자들에게 한마디", placeholder="오늘 비오는데 파전에 막걸리 땡기는 노래입니다~")
-            
+            dj_url = st.text_input("유튜브 링크")
+            dj_comment = st.text_input("청취자들에게 한마디")
             if st.form_submit_button("📡 내 방송국 등록"):
                 if dj_url and dj_comment:
                     save_station(dj_url, dj_comment)
-                    st.success("방송국이 개설되었습니다! 목록에서 확인해보세요.")
-                    st.rerun()
-                else:
-                    st.warning("내용을 입력해주세요.")
+                    st.success("등록 완료!"); st.rerun()
+                else: st.warning("내용을 입력해주세요.")
