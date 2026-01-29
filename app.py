@@ -45,7 +45,6 @@ def set_style():
             background-color: #1e3932; color: white; padding: 20px; border-radius: 10px;
             text-align: center; margin-bottom: 20px;
         }
-        /* 화재보험 설명 박스 스타일 */
         .fire-info-box {
             background-color: #fff3cd; padding: 20px; border-radius: 10px;
             border: 2px solid #ffc107; text-align: center; margin-bottom: 20px;
@@ -53,7 +52,12 @@ def set_style():
         .fire-emoji { font-size: 3rem; }
         .fire-title { font-weight: bold; font-size: 1.2rem; margin: 10px 0; }
         .fire-desc { font-size: 0.9rem; color: #555; }
-        .arrow { font-size: 2rem; color: #ff6f0f; font-weight: bold; }
+        
+        /* 로그인 화면 스타일 */
+        .login-box {
+            max-width: 400px; margin: 0 auto; padding: 40px; background-color: white;
+            border-radius: 20px; box-shadow: 0px 4px 12px rgba(0,0,0,0.1); text-align: center;
+        }
         </style>
     """, unsafe_allow_html=True)
 
@@ -66,7 +70,7 @@ def send_email_safe(name, phone, client_email, req_text, type_tag):
     pw = st.secrets["smtp"].get("password", "")
     
     subject = f"☕ [스타벅스 이벤트/DOHA] {name}님 {type_tag} 신청"
-    body = f"이름:{name}\n연락처:{phone}\n이메일:{client_email}\n요청:{req_text}"
+    body = f"매장명: {st.session_state.store_name}\n이름:{name}\n연락처:{phone}\n이메일:{client_email}\n요청:{req_text}"
     msg = MIMEText(body)
     msg['Subject'] = subject
     msg['From'] = sender
@@ -81,7 +85,7 @@ def send_email_safe(name, phone, client_email, req_text, type_tag):
     except Exception as e: return False, str(e)
 
 # -----------------------------------------------------------------------------
-# [기능 3] 데이터 유틸리티
+# [기능 3] 데이터 유틸리티 (뉴스, 농산물, 출퇴근)
 # -----------------------------------------------------------------------------
 def get_real_google_news():
     try:
@@ -101,34 +105,84 @@ def get_agri_price():
     return prices
 
 def get_today_fortune():
-    fortunes = ["오늘은 귀인을 만날 운세입니다.", "금전운이 매우 좋습니다.", "예상치 못한 지출을 조심하세요.", "경쟁자보다 앞서 나가는 날입니다.", "건강이 최고입니다. 무리하지 마세요."]
+    fortunes = ["귀인을 만날 운세입니다.", "금전운이 매우 좋습니다.", "예상치 못한 지출 조심!", "경쟁자보다 앞서 나갑니다.", "건강이 최고입니다."]
     random.seed(datetime.now().day)
     return random.choice(fortunes)
 
-CSV_FILE = "attendance_log.csv"
+# [핵심] 출퇴근부 - 매장별 분리 저장
+def get_csv_filename():
+    # 매장명(store_name)을 파일명에 포함시켜서 섞이지 않게 함
+    safe_name = "".join([c for c in st.session_state.store_name if c.isalnum()]) # 특수문자 제거
+    return f"log_{safe_name}.csv"
+
 def load_attendance():
-    if os.path.exists(CSV_FILE): return pd.read_csv(CSV_FILE)
+    filename = get_csv_filename()
+    if os.path.exists(filename): return pd.read_csv(filename)
     return pd.DataFrame(columns=["일시", "직원명", "구분"])
+
 def save_attendance(name, action):
     df = load_attendance()
     new_row = {"일시": datetime.now().strftime("%Y-%m-%d %H:%M"), "직원명": name, "구분": action}
     df = pd.concat([pd.DataFrame([new_row]), df], ignore_index=True)
-    df.to_csv(CSV_FILE, index=False)
+    df.to_csv(get_csv_filename(), index=False)
     return df
 
 # -----------------------------------------------------------------------------
-# [메인] 앱 실행
+# [메인] 앱 실행 (로그인 로직 추가)
 # -----------------------------------------------------------------------------
 set_style()
 
-st.title("🥕 DOHA 사장님 비서")
+# 세션 상태 초기화 (로그인 여부 확인)
+if 'logged_in' not in st.session_state:
+    st.session_state.logged_in = False
+if 'store_name' not in st.session_state:
+    st.session_state.store_name = ""
+
+# =============================================================================
+# 🚪 로그인 화면 (입장 게이트)
+# =============================================================================
+if not st.session_state.logged_in:
+    st.markdown("<br><br>", unsafe_allow_html=True)
+    c1, c2, c3 = st.columns([1, 2, 1])
+    with c2:
+        st.markdown("""
+        <div class='login-box'>
+            <h1>🥕 DOHA 사장님 비서</h1>
+            <p>우리 가게만의 비밀 장부를 만들어보세요.</p>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        st.markdown("<br>", unsafe_allow_html=True)
+        store_input = st.text_input("매장 이름 (예: 도하분식)", placeholder="매장 이름을 입력하세요")
+        pw_input = st.text_input("비밀번호 (숫자 4자리)", type="password", placeholder="남들이 못 보게 잠급니다")
+        
+        if st.button("내 가게 입장하기 (로그인)"):
+            if store_input and pw_input:
+                st.session_state.logged_in = True
+                st.session_state.store_name = store_input
+                st.success(f"환영합니다, {store_input} 사장님!")
+                st.rerun()
+            else:
+                st.warning("매장 이름과 비밀번호를 입력해주세요.")
+    
+    st.stop() # 로그인이 안 되면 아래 코드를 실행하지 않음
+
+# =============================================================================
+# 🏠 메인 앱 화면 (로그인 후 보임)
+# =============================================================================
+# 사이드바에 로그아웃 버튼 추가
+with st.sidebar:
+    st.write(f"👤 **{st.session_state.store_name}**님 접속 중")
+    if st.button("로그아웃"):
+        st.session_state.logged_in = False
+        st.rerun()
+
+st.title(f"🥕 DOHA 사장님 비서 ({st.session_state.store_name})")
 st.caption(f"오늘 날짜: {datetime.now().strftime('%Y년 %m월 %d일')}")
 
 tab1, tab2, tab3, tab4 = st.tabs(["🏠 데일리 홈", "🔍 전국 당근검색", "⏰ 직원 출퇴근", "🔥 화재보험 점검"])
 
-# =============================================================================
 # [TAB 1] 데일리 홈
-# =============================================================================
 with tab1:
     st.subheader("📰 실시간 사장님 뉴스")
     news_list = get_real_google_news()
@@ -144,16 +198,16 @@ with tab1:
     col_left, col_right = st.columns(2)
     with col_left:
         st.subheader("🍀 오늘의 장사 운세")
-        st.success(f"daily: {get_today_fortune()}")
+        st.success(f"Today: {get_today_fortune()}")
         st.markdown("<br>", unsafe_allow_html=True)
-        st.subheader("🥬 농산물 도매 시세 (평균)")
+        st.subheader("🥬 농산물 도매 시세")
         agri = get_agri_price()
         for item, val in agri.items():
             color = "red" if val['change'] > 0 else "blue"
             sign = "▲" if val['change'] > 0 else "▼"
             st.markdown(f"**{item}**: {val['price']:,}원 <span style='color:{color}'>({sign}{abs(val['change'])})</span>", unsafe_allow_html=True)
     with col_right:
-        st.subheader("🧮 오늘의 목표 매출 계산기")
+        st.subheader("🧮 오늘의 목표 매출")
         st.markdown("""<div class='metric-card'>고정비를 입력하면 <b>오늘 목표치</b>를 계산해드립니다.</div>""", unsafe_allow_html=True)
         c1, c2 = st.columns(2)
         month_fixed = c1.number_input("월 고정비 합계", value=4500000, step=10000)
@@ -165,9 +219,7 @@ with tab1:
             target_sales = daily_fixed / (margin / 100)
             st.success(f"💰 오늘 목표 매출: **{int(target_sales):,}원** (BEP)")
 
-# =============================================================================
 # [TAB 2] 당근 검색
-# =============================================================================
 with tab2:
     st.header("🔍 당근마켓 전국 매물 찾기")
     keyword = st.text_input("찾으시는 물건", "")
@@ -177,11 +229,9 @@ with tab2:
             st.markdown(f"<br><a href='{url}' target='_blank' style='background-color:#ff6f0f;color:white;padding:15px;display:block;text-decoration:none;border-radius:10px;font-weight:bold;text-align:center;'>👉 '{keyword}' 전국 매물 보기 (클릭)</a>", unsafe_allow_html=True)
         else: st.warning("검색어를 입력해주세요.")
 
-# =============================================================================
-# [TAB 3] 출퇴근
-# =============================================================================
+# [TAB 3] 출퇴근 (매장별 데이터 분리!)
 with tab3:
-    st.header("⏰ 직원 출퇴근 기록부")
+    st.header(f"⏰ {st.session_state.store_name} 직원 출퇴근부")
     c1, c2 = st.columns(2)
     emp_name = c1.text_input("직원 이름")
     action = c2.selectbox("구분", ["출근", "퇴근"])
@@ -194,10 +244,10 @@ with tab3:
     df_log = load_attendance()
     if not df_log.empty:
         st.dataframe(df_log, use_container_width=True)
+    else:
+        st.info("아직 기록이 없습니다.")
 
-# =============================================================================
-# [TAB 4] 화재보험 점검 (핵심 업데이트!)
-# =============================================================================
+# [TAB 4] 화재보험 점검
 with tab4:
     st.markdown("""
     <div class='event-box'>
@@ -207,59 +257,43 @@ with tab4:
     """, unsafe_allow_html=True)
     
     st.header("🔥 우리 가게 화재보험 점검")
-    
-    # 1. 초등학생도 이해하는 그림 설명
     st.markdown("#### 🧐 왜 화재보험이 필수인가요? (그림 설명)")
     c1, c2, c3 = st.columns(3)
-    with c1:
-        st.markdown("""<div class='fire-info-box'><span class='fire-emoji'>🔥</span><div class='fire-title'>내 가게가 탈 때</div><div class='fire-desc'>건물주 보험은 건물만 보상합니다. 내 집기, 인테리어는 내가 지켜야 합니다.</div></div>""", unsafe_allow_html=True)
-    with c2:
-        st.markdown("""<div class='fire-info-box'><span class='fire-emoji'>🏘️</span><div class='fire-title'>옆 가게로 번질 때</div><div class='fire-desc'>내 불이 옆집으로 옮겨붙으면? 그 엄청난 배상금도 다 내 책임입니다.</div></div>""", unsafe_allow_html=True)
-    with c3:
-        st.markdown("""<div class='fire-info-box'><span class='fire-emoji'>🤕</span><div class='fire-title'>손님이 다칠 때</div><div class='fire-desc'>매장에서 넘어진 손님 치료비, 배상금... 보험 없으면 생돈 나갑니다.</div></div>""", unsafe_allow_html=True)
+    with c1: st.markdown("""<div class='fire-info-box'><span class='fire-emoji'>🔥</span><div class='fire-title'>내 가게가 탈 때</div><div class='fire-desc'>건물주 보험은 보상해주지 않습니다.</div></div>""", unsafe_allow_html=True)
+    with c2: st.markdown("""<div class='fire-info-box'><span class='fire-emoji'>🏘️</span><div class='fire-title'>옆 가게로 번질 때</div><div class='fire-desc'>옆집 피해액도 다 물어줘야 합니다.</div></div>""", unsafe_allow_html=True)
+    with c3: st.markdown("""<div class='fire-info-box'><span class='fire-emoji'>🤕</span><div class='fire-title'>손님이 다칠 때</div><div class='fire-desc'>치료비, 합의금 생돈 나갑니다.</div></div>""", unsafe_allow_html=True)
         
     st.markdown("---")
-
-    # 2. 보험료 및 배상책임 진단 로직 (핵심!)
-    st.subheader("🏥 내 보험료 & 보장 진단")
-    
+    st.subheader("🏥 내 보험료 & 배상책임 진단")
     c1, c2 = st.columns(2)
     curr = c1.number_input("현재 월 보험료 (원)", value=50000)
     size = c2.number_input("매장 평수 (평)", value=20)
     
-    # 시설물 배상책임 가입 여부 확인 (라디오 버튼)
-    st.markdown("<br><b>중요! '시설물배상책임보험' 가입하셨나요?</b> (손님 다쳤을 때 보상)", unsafe_allow_html=True)
-    liab_check = st.radio("배상책임 가입 여부", ["네, 가입했습니다.", "아니요 / 잘 모르겠습니다."], label_visibility="collapsed")
+    st.markdown("<br><b>중요! '시설물배상책임보험' 가입하셨나요?</b>", unsafe_allow_html=True)
+    liab_check = st.radio("배상책임 여부", ["네, 가입했습니다.", "아니요 / 잘 모르겠습니다."], label_visibility="collapsed")
 
     if st.button("💰 종합 진단 시작"):
-        std = size * 1000 + 10000 # 적정 보험료 계산
+        std = size * 1000 + 10000 
         diff = curr - std
         
-        # 1차 진단: 보험료
         if diff > 15000:
-            st.error(f"🚨 [보험료 경고] 매월 약 {diff:,}원 비싸게 내고 계십니다! (거품 의심)")
-            price_status = "거품"
+            st.error(f"🚨 [보험료 경고] 매월 약 {diff:,}원 비싸게 내고 계십니다!")
+            price_stat = "비쌈"
         else:
             st.success("✅ [보험료 양호] 적정하게 잘 내고 계십니다.")
-            price_status = "적정"
+            price_stat = "적정"
             
-        # 2차 진단: 배상책임 (보험료가 적정해도 이게 없으면 위험!)
         if liab_check == "아니요 / 잘 모르겠습니다.":
             st.markdown("""
             <div style='background-color:#fff3cd; padding:20px; border-radius:10px; border:2px solid red; margin-top:20px;'>
             <h3 style='color:red; margin:0;'>🚨 [긴급 경고] 사장님, 큰일 납니다!</h3>
             <b>시설물 배상책임보험이 확인되지 않습니다.</b><br>
-            보험료가 싸다고 좋은 게 아닙니다. 지금 손님이 매장에서 넘어지면 모든 치료비와 합의금을 사장님 사비로 물어주셔야 합니다.<br>
-            <b>지금 바로 확인 및 추가 가입이 시급합니다!</b>
+            손님이 매장에서 넘어지면 모든 치료비를 사장님이 물어줘야 합니다.
             </div>
             """, unsafe_allow_html=True)
-            st.info("👇 아래 상담 신청을 통해 '배상책임 특약'을 꼭 확인받으세요!")
-        elif price_status == "거품":
-             st.info("👇 아래 상담 신청을 통해 불필요한 특약을 빼고 보험료를 낮추세요!")
-        else:
-             st.info("👏 완벽합니다! 혹시 모를 빈틈이 없는지 전문가 더블체크만 받아보세요. (커피는 덤!)")
+        elif price_stat == "비쌈":
+            st.info("👇 상담을 통해 불필요한 특약을 빼고 보험료를 낮추세요!")
 
-    # 3. 상담 신청 폼
     st.markdown("---")
     st.info("부담스러운 전화 NO! **카카오톡**으로 먼저 가볍게 안내해드립니다.")
     
@@ -271,12 +305,10 @@ with tab4:
         
         if st.form_submit_button("📨 상담 신청하고 스타벅스 받기"):
             if agree and name and phone:
-                # 메일 내용에 배상책임 여부도 포함시킴
-                req_detail = f"화재보험 상담 요청 (배상책임 가입여부: {liab_check})"
-                s, m = send_email_safe(name, phone, "미입력", req_detail, "화재보험 점검")
+                req_detail = f"화재보험 상담 (배상책임: {liab_check})"
+                s, m = send_email_safe(name, phone, "미입력", req_detail, "화재보험")
                 if s:
                     st.balloons()
                     st.success("✅ 신청 완료! 카톡으로 먼저 인사드리겠습니다.")
-                    st.markdown("**[진행 절차]** 카톡 안내 → 10분 상담 → 3일 내 쿠폰 발송")
                 else: st.error(m)
             else: st.warning("정보를 입력하고 동의해주세요.")
