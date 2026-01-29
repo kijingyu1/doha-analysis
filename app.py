@@ -3,7 +3,7 @@ import pandas as pd
 import numpy as np
 import requests
 import feedparser
-import yfinance as yf # 주식 정보용
+import yfinance as yf
 import random
 from datetime import datetime
 import smtplib
@@ -15,7 +15,7 @@ import os
 # -----------------------------------------------------------------------------
 st.set_page_config(
     page_title="DOHA 사장님 비서",
-    page_icon="🥕",
+    page_icon="🥕", # 이 아이콘이 핸드폰 바탕화면 아이콘이 됩니다!
     layout="wide",
     initial_sidebar_state="collapsed"
 )
@@ -29,33 +29,25 @@ def set_style():
         .main { background-color: #f8f9fa; }
         h1, h2, h3 { color: #ff6f0f; font-weight: 800; } 
         
-        /* 금융 정보 카드 */
-        .finance-box {
-            background-color: white; padding: 15px; border-radius: 10px;
-            box-shadow: 1px 1px 3px rgba(0,0,0,0.1); text-align: center; margin-bottom: 10px;
-        }
+        .finance-box { background-color: white; padding: 15px; border-radius: 10px; box-shadow: 1px 1px 3px rgba(0,0,0,0.1); text-align: center; margin-bottom: 10px; }
         .finance-title { font-size: 0.9rem; color: #666; font-weight: bold; }
         .finance-val { font-size: 1.5rem; font-weight: bold; color: #333; }
         .finance-change { font-size: 1rem; font-weight: bold; }
         
-        /* 뉴스 스타일 */
         .news-box { background-color: white; padding: 15px; border-radius: 10px; border-left: 5px solid #ff6f0f; margin-bottom: 20px; }
         .news-item { padding: 8px 0; border-bottom: 1px solid #eee; }
         .news-item a { text-decoration: none; color: #333; font-weight: bold; font-size: 1rem; }
-        .news-item a:hover { color: #ff6f0f; }
         
-        .stButton>button { 
-            background-color: #ff6f0f; color: white; border-radius: 8px; 
-            font-weight: bold; width: 100%; height: 45px; border: none;
-        }
+        .stButton>button { background-color: #ff6f0f; color: white; border-radius: 8px; font-weight: bold; width: 100%; height: 45px; border: none; }
         .stButton>button:hover { background-color: #e65c00; }
         
-        /* 기타 박스들 */
-        .metric-card { background-color: white; padding: 15px; border-radius: 10px; text-align: center; margin-bottom: 10px; }
         .event-box { background-color: #1e3932; color: white; padding: 20px; border-radius: 10px; text-align: center; margin-bottom: 20px; }
         .fire-info-box { background-color: #fff3cd; padding: 20px; border-radius: 10px; border: 2px solid #ffc107; text-align: center; margin-bottom: 20px; }
         .fire-emoji { font-size: 3rem; }
         .login-box { max-width: 400px; margin: 0 auto; padding: 40px; background-color: white; border-radius: 20px; text-align: center; }
+        
+        /* 설치 안내 박스 */
+        .install-guide { background-color: #e3f2fd; padding: 15px; border-radius: 10px; border: 1px solid #90caf9; margin-bottom: 15px; color: #0d47a1; }
         </style>
     """, unsafe_allow_html=True)
 
@@ -84,64 +76,39 @@ def send_email_safe(name, phone, client_email, req_text, type_tag):
     except Exception as e: return False, str(e)
 
 # -----------------------------------------------------------------------------
-# [기능 3] 데이터 엔진 (금융, 뉴스, 운세)
+# [기능 3] 데이터 엔진
 # -----------------------------------------------------------------------------
-
-# 1. 금융 데이터 (야후 파이낸스) - 캐싱 적용 (10분마다 갱신)
 @st.cache_data(ttl=600)
 def get_finance_data():
     try:
-        # 코스피(^KS11), 나스닥(^IXIC), 원달러환율(KRW=X)
-        tickers = {
-            'KOSPI': '^KS11',
-            'NASDAQ': '^IXIC',
-            'USD/KRW': 'KRW=X'
-        }
+        tickers = {'KOSPI': '^KS11', 'NASDAQ': '^IXIC', 'USD/KRW': 'KRW=X'}
         data = {}
         for name, symbol in tickers.items():
             ticker = yf.Ticker(symbol)
-            # 최근 2일치 데이터 가져오기 (전일비 계산용)
             hist = ticker.history(period="2d")
             if len(hist) >= 1:
                 current = hist['Close'].iloc[-1]
-                # 전일 데이터가 있으면 등락폭 계산, 없으면 0
                 prev = hist['Close'].iloc[-2] if len(hist) > 1 else current
                 change = current - prev
                 change_pct = (change / prev) * 100
                 data[name] = {"price": current, "change": change, "pct": change_pct}
         return data
-    except:
-        return {}
+    except: return {}
 
-# 2. 뉴스 데이터 (키워드 최적화)
 def get_real_google_news():
-    # 사장님이 요청하신 키워드 + AI 추천 키워드 조합
-    keywords = [
-        "소상공인", "자영업", "지원금", "정책", # 기본
-        "세금", "대출금리", "최저임금", # 금융/법률
-        "소비트렌드", "창업", "폐업" # 트렌드
-    ]
-    # 검색 쿼리 생성 (OR 조건으로 풍부하게)
+    keywords = ["소상공인", "자영업", "지원금", "정책", "세금", "대출금리", "최저임금", "소비트렌드", "창업", "폐업"]
     query = "+OR+".join(keywords)
     url = f"https://news.google.com/rss/search?q={query}&hl=ko&gl=KR&ceid=KR:ko"
-    
     try:
         feed = feedparser.parse(url)
-        return feed.entries[:10] # 10개만 반환
+        return feed.entries[:10]
     except: return []
 
 def get_today_fortune():
-    fortunes = [
-        "오늘은 귀인을 만날 운세입니다. 첫 손님에게 최선을 다하세요!",
-        "금전운이 매우 좋습니다. 재고가 부족할 수 있으니 미리 챙기세요.",
-        "예상치 못한 지출이 생길 수 있습니다. 꼼꼼히 체크하세요.",
-        "경쟁자보다 앞서 나가는 아이디어가 떠오르는 날입니다.",
-        "건강이 재산입니다. 오늘은 무리하지 말고 일찍 마감해보세요."
-    ]
+    fortunes = ["귀인을 만날 운세입니다!", "금전운 최고! 재고 확인하세요.", "지출 관리 꼼꼼히 하세요.", "아이디어가 떠오르는 날!", "건강이 최고입니다."]
     random.seed(datetime.now().day)
     return random.choice(fortunes)
 
-# 출퇴근부
 def get_csv_filename():
     safe_name = "".join([c for c in st.session_state.store_name if c.isalnum()])
     return f"log_{safe_name}.csv"
@@ -164,13 +131,24 @@ set_style()
 if 'logged_in' not in st.session_state: st.session_state.logged_in = False
 if 'store_name' not in st.session_state: st.session_state.store_name = ""
 
-# 로그인
+# 로그인 화면
 if not st.session_state.logged_in:
     st.markdown("<br><br>", unsafe_allow_html=True)
     c1, c2, c3 = st.columns([1, 2, 1])
     with c2:
         st.markdown("<div class='login-box'><h1>🥕 DOHA 사장님 비서</h1><p>로그인 (키오스크 방식)</p></div>", unsafe_allow_html=True)
         st.markdown("<br>", unsafe_allow_html=True)
+        
+        # [설치 안내 버튼] - 로그인 화면에도 배치
+        with st.expander("📲 매번 로그인 귀찮으신가요? (앱 설치법)"):
+            st.markdown("""
+            **1. 갤럭시(Android)** 👉 우측 상단 점 3개(⋮) 클릭 → **'홈 화면에 추가'** 클릭
+            
+            **2. 아이폰(iOS)** 👉 하단 공유 버튼(📤) 클릭 → **'홈 화면에 추가'** 클릭
+            
+            이렇게 하면 바탕화면에 **당근 아이콘**이 생깁니다!
+            """)
+
         store_input = st.text_input("매장 이름 (예: 도하분식)")
         pw_input = st.text_input("비밀번호 (숫자 4자리)", type="password")
         if st.button("입장하기"):
@@ -184,20 +162,29 @@ if not st.session_state.logged_in:
 # 메인 화면
 with st.sidebar:
     st.write(f"👤 **{st.session_state.store_name}**님")
+    # 사이드바에도 설치법 안내
+    with st.expander("📲 앱 설치 방법"):
+        st.info("브라우저 메뉴에서 '홈 화면에 추가'를 누르시면 바탕화면에 아이콘이 생성됩니다.")
     if st.button("로그아웃"):
         st.session_state.logged_in = False
         st.rerun()
 
 st.title(f"🥕 DOHA 사장님 비서 ({st.session_state.store_name})")
+
+# [앱 설치 유도 배너] - 로그인 직후 상단에 노출
+st.markdown("""
+<div class='install-guide'>
+<b>💡 꿀팁:</b> 매번 인터넷 켜지 마세요! 브라우저 메뉴에서 <b>[홈 화면에 추가]</b>를 누르면 <b>앱 아이콘</b>이 생깁니다.
+</div>
+""", unsafe_allow_html=True)
+
 st.caption(f"오늘 날짜: {datetime.now().strftime('%Y년 %m월 %d일')}")
 
 tab1, tab2, tab3, tab4 = st.tabs(["🏠 데일리 홈", "🔍 전국 당근검색", "⏰ 직원 출퇴근", "🔥 화재보험 점검"])
 
-# [TAB 1] 데일리 홈 (금융 + 뉴스 + 계산기)
+# [TAB 1] 데일리 홈
 with tab1:
-    # 1. 상단: 뉴스 (10개)
     st.subheader("📰 오늘의 사장님 필수 뉴스")
-    st.caption("키워드: 소상공인, 지원금, 정책, 세금, 대출, 트렌드")
     news_list = get_real_google_news()
     if news_list:
         with st.container():
@@ -209,33 +196,19 @@ with tab1:
 
     st.markdown("---")
     col_left, col_right = st.columns(2)
-    
-    # [왼쪽] 운세 + 금융 지표
     with col_left:
-        st.subheader("🍀 오늘의 장사 운세")
+        st.subheader("🍀 오늘의 운세")
         st.success(f"Today: {get_today_fortune()}")
-        
         st.markdown("<br>", unsafe_allow_html=True)
         st.subheader("📉 주요 경제 지표")
-        
         finance = get_finance_data()
         if finance:
             for name, data in finance.items():
                 color = "red" if data['change'] > 0 else "blue"
                 sign = "▲" if data['change'] > 0 else "▼"
-                st.markdown(f"""
-                <div class='finance-box'>
-                    <div class='finance-title'>{name}</div>
-                    <div class='finance-val'>{data['price']:,.2f}</div>
-                    <div class='finance-change' style='color:{color};'>
-                        {sign} {abs(data['change']):.2f} ({data['pct']:.2f}%)
-                    </div>
-                </div>
-                """, unsafe_allow_html=True)
-        else:
-            st.info("금융 데이터를 불러오는 중...")
+                st.markdown(f"<div class='finance-box'><div class='finance-title'>{name}</div><div class='finance-val'>{data['price']:,.2f}</div><div class='finance-change' style='color:{color};'>{sign} {abs(data['change']):.2f} ({data['pct']:.2f}%)</div></div>", unsafe_allow_html=True)
+        else: st.info("데이터 로딩 중...")
 
-    # [오른쪽] 스마트 매출 계산기
     with col_right:
         st.subheader("🧮 오늘의 목표 매출")
         st.markdown("""<div class='metric-card'>고정비를 입력하면 <b>오늘 목표치</b>를 계산해드립니다.</div>""", unsafe_allow_html=True)
@@ -248,7 +221,6 @@ with tab1:
             margin = st.slider("마진율 (%)", 10, 50, 25)
             target_sales = daily_fixed / (margin / 100)
             st.success(f"💰 오늘 목표 매출: **{int(target_sales):,}원** (BEP)")
-            st.caption("고정비 줄이는 법? (4번 탭 확인)")
 
 # [TAB 2] 당근 검색
 with tab2:
