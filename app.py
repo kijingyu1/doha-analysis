@@ -157,7 +157,7 @@ def get_today_fortune():
     random.seed(datetime.now().day)
     return random.choice(fortunes)
 
-# 5. AI 문구 생성 (간단 규칙 기반)
+# 5. AI 문구 생성
 def generate_copy(menu, vibe):
     templates = {
         "감성": [
@@ -208,10 +208,16 @@ if not st.session_state.logged_in:
     with c2:
         st.markdown("<div class='login-box'><h1>🥕 DOHA 사장님 비서</h1><p>로그인 (키오스크 방식)</p></div>", unsafe_allow_html=True)
         st.markdown("<br>", unsafe_allow_html=True)
+        
+        # [안내 문구 강화] - 여기가 핵심입니다!
+        st.warning("📢 **꼭 읽어주세요!**\n\n다음에 다시 오실 때 **똑같은 [매장 이름]과 [비밀번호]**를 입력하셔야 기존 기록(출퇴근부 등)을 이어서 볼 수 있습니다.\n\n(잊어버리면 기록을 찾을 수 없어요! 꼭 기억하기 쉬운 걸로 설정하세요.)")
+
         with st.expander("📲 카톡에서 들어오셨나요? (설치법)"):
             st.markdown("**우측 하단 점 3개 → [다른 브라우저로 열기] → [홈 화면에 추가]**")
-        store_input = st.text_input("매장 이름 (예: 도하분식)")
+            
+        store_input = st.text_input("매장 이름 (예: 도하분식)", placeholder="기억하기 쉬운 이름을 쓰세요")
         pw_input = st.text_input("비밀번호 (숫자 4자리)", type="password")
+        
         if st.button("입장하기"):
             if store_input and pw_input:
                 st.session_state.logged_in = True
@@ -256,7 +262,7 @@ st.markdown(f"<div class='notice-bar'>📢 <b>[공지]</b> {current_notice}</div
 
 st.caption(f"오늘 날짜: {datetime.now().strftime('%Y년 %m월 %d일')}")
 
-# 탭 구성 (소통/제휴, 홍보문구 추가)
+# 탭 구성
 tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["🏠 홈", "🔍 당근검색", "⏰ 출퇴근", "🔥 보험점검", "💬 소통/제휴", "✍️ 홍보문구"])
 
 # [TAB 1~4] 기존 기능 유지
@@ -355,12 +361,10 @@ with tab4:
                 else: st.error(m)
             else: st.warning("정보를 입력하세요.")
 
-# [TAB 5] 소통/제휴 (NEW)
+# [TAB 5] 소통/제휴
 with tab5:
     st.header("💬 사장님 대나무숲 (익명)")
     st.caption("장사하면서 힘들었던 일, 궁금한 점 자유롭게 나누세요.")
-    
-    # 글쓰기
     with st.form("community_form"):
         user_msg = st.text_input("하고 싶은 말", placeholder="익명으로 등록됩니다.")
         if st.form_submit_button("글 남기기"):
@@ -368,47 +372,27 @@ with tab5:
                 save_post(st.session_state.store_name, user_msg)
                 st.success("등록되었습니다.")
                 st.rerun()
-    
-    # 글 목록 표시
     st.markdown("---")
     posts = get_posts()
     if not posts.empty:
-        # 최신순 정렬
         for idx, row in posts[::-1].iterrows():
-            st.markdown(f"""
-            <div class='chat-row'>
-                <span class='chat-user'>🥕 {row['user']}</span>
-                <span class='chat-time'>{row['timestamp']}</span>
-                <div class='chat-msg'>{row['message']}</div>
-            </div>
-            """, unsafe_allow_html=True)
-    else:
-        st.info("첫 번째 글을 남겨주세요!")
-
-    # 제휴/광고 문의 섹션
+            st.markdown(f"<div class='chat-row'><span class='chat-user'>🥕 {row['user']}</span><span class='chat-time'>{row['timestamp']}</span><div class='chat-msg'>{row['message']}</div></div>", unsafe_allow_html=True)
+    else: st.info("첫 번째 글을 남겨주세요!")
     st.markdown("<br><br>", unsafe_allow_html=True)
     st.subheader("🤝 제휴 및 광고 문의")
     st.info("식자재 납품, 인테리어, 마케팅 등 사장님들께 도움되는 업체의 제휴를 환영합니다.")
     with st.expander("문의하기"):
         st.markdown("이메일 문의: **kidoha84@gmail.com**")
 
-# [TAB 6] 홍보 문구 생성기 (NEW)
+# [TAB 6] 홍보 문구 생성기
 with tab6:
     st.header("✍️ AI 홍보 문구 생성기")
     st.markdown("당근마켓, 인스타에 올릴 글, 고민하지 마세요!")
-    
     c1, c2 = st.columns(2)
     menu_name = c1.text_input("메뉴/상품 이름", placeholder="예: 떡볶이, 겨울 코트")
     vibe = c2.selectbox("원하는 느낌", ["감성", "유머", "강조"])
-    
     if st.button("✨ 문구 생성하기"):
         if menu_name:
             copy = generate_copy(menu_name, vibe)
-            st.markdown(f"""
-            <div style='background-color:#e3f2fd; padding:20px; border-radius:10px; margin-top:10px;'>
-            <h3>📝 추천 문구</h3>
-            <p style='font-size:1.2rem;'>{copy}</p>
-            </div>
-            """, unsafe_allow_html=True)
-        else:
-            st.warning("상품 이름을 입력해주세요.")
+            st.markdown(f"<div style='background-color:#e3f2fd; padding:20px; border-radius:10px; margin-top:10px;'><h3>📝 추천 문구</h3><p style='font-size:1.2rem;'>{copy}</p></div>", unsafe_allow_html=True)
+        else: st.warning("상품 이름을 입력해주세요.")
