@@ -2,10 +2,9 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import requests
-from geopy.geocoders import Nominatim
-import os
-import time
+import feedparser # 뉴스 크롤링용
 import random
+from datetime import datetime
 import smtplib
 from email.mime.text import MIMEText
 
@@ -13,236 +12,234 @@ from email.mime.text import MIMEText
 # [0] 페이지 설정
 # -----------------------------------------------------------------------------
 st.set_page_config(
-    page_title="DOHA 비즈니스 파트너",
-    page_icon="🏙️",
+    page_title="DOHA 사장님 비서",
+    page_icon="🥕",
     layout="wide",
     initial_sidebar_state="collapsed"
 )
 
 # -----------------------------------------------------------------------------
-# [기능 1] 메일 전송 엔진 (안전장치 포함)
+# [기능 1] 스타일 & 한글 폰트
 # -----------------------------------------------------------------------------
-def send_email_safe(name, phone, client_email, request_text, pref_time, type_tag):
-    if "smtp" not in st.secrets:
-        return False, "Secrets 설정이 비어있습니다."
+def set_style():
+    st.markdown("""
+        <style>
+        .main { background-color: #f8f9fa; }
+        h1, h2, h3 { color: #ff6f0f; font-weight: 800; } /* 당근색 포인트 */
+        .metric-card {
+            background-color: white; padding: 15px; border-radius: 10px;
+            box-shadow: 1px 1px 5px rgba(0,0,0,0.1); text-align: center;
+            color: black !important; margin-bottom: 10px;
+        }
+        .news-card {
+            background-color: white; padding: 15px; border-radius: 10px;
+            border-left: 5px solid #ff6f0f; margin-bottom: 10px; color: black;
+        }
+        .news-card a { text-decoration: none; color: #333; font-weight: bold; }
+        .stButton>button { 
+            background-color: #ff6f0f; color: white; border-radius: 8px; 
+            font-weight: bold; width: 100%; height: 45px; border: none;
+        }
+        .stButton>button:hover { background-color: #e65c00; color: white; }
+        </style>
+    """, unsafe_allow_html=True)
 
+# -----------------------------------------------------------------------------
+# [기능 2] 메일 전송 (보험 DB용)
+# -----------------------------------------------------------------------------
+def send_email_safe(name, phone, client_email, req_text, type_tag):
+    if "smtp" not in st.secrets: return False, "설정 오류"
     sender = st.secrets["smtp"].get("email", "")
     pw = st.secrets["smtp"].get("password", "")
-
-    if not sender or not pw:
-        return False, "이메일 설정 오류"
-
-    subject = f"🔥 [DOHA {type_tag}] {name}님 상담신청"
-    body = f"""
-    [DOHA {type_tag} 신청서]
-    1. 고객명 : {name}
-    2. 연락처 : {phone}
-    3. 이메일 : {client_email}
-    4. 희망시간: {pref_time}
-    5. 요청사항: {request_text}
-    """
+    
+    subject = f"🔥 [DOHA {type_tag}] {name}님 문의"
+    body = f"이름:{name}\n연락처:{phone}\n내용:{req_text}"
     msg = MIMEText(body)
     msg['Subject'] = subject
     msg['From'] = sender
     msg['To'] = sender 
 
     try:
-        with smtplib.SMTP('smtp.gmail.com', 587, timeout=10) as server:
-            server.ehlo()
+        with smtplib.SMTP('smtp.gmail.com', 587, timeout=5) as server:
             server.starttls()
             server.login(sender, pw)
             server.sendmail(sender, sender, msg.as_string())
         return True, "성공"
-    except Exception as e:
-        return False, f"전송 실패: {e}"
+    except Exception as e: return False, str(e)
 
 # -----------------------------------------------------------------------------
-# [기능 2] 스타일
+# [기능 3] 유틸리티 엔진 (뉴스, 농산물, 운세)
 # -----------------------------------------------------------------------------
-def set_style():
-    st.markdown("""
-        <style>
-        .main { background-color: #f8f9fa; }
-        h1, h2, h3 { color: #004aad; }
-        .stTabs [data-baseweb="tab-list"] { gap: 10px; }
-        .stTabs [data-baseweb="tab"] {
-            height: 50px; white-space: pre-wrap; background-color: white;
-            border-radius: 5px; box-shadow: 1px 1px 3px rgba(0,0,0,0.1);
-        }
-        .stTabs [aria-selected="true"] {
-            background-color: #004aad !important; color: white !important;
-        }
-        .metric-card {
-            background-color: white; padding: 20px; border-radius: 10px;
-            box-shadow: 2px 2px 10px rgba(0,0,0,0.1); text-align: center;
-            color: black !important;
-        }
-        .info-box {
-            background-color: #e8f0fe; padding: 15px; border-radius: 10px;
-            border-left: 5px solid #004aad; color: black !important; margin-bottom: 10px;
-        }
-        .warning-box {
-            background-color: #fff3cd; padding: 15px; border-radius: 10px;
-            border-left: 5px solid #ffc107; color: black !important; margin-bottom: 10px;
-        }
-        </style>
-    """, unsafe_allow_html=True)
-
-# -----------------------------------------------------------------------------
-# [기능 3] 데이터 엔진 (상권분석용)
-# -----------------------------------------------------------------------------
-MY_KEY = "812fa5d3b23f43b70156810df8185abaee5960b4f233858a3ccb3eb3844c86ff"
-
-def get_real_store_count(address, keyword):
+def get_news():
+    # 구글 뉴스(경제/사업 섹션) RSS 크롤링
     try:
-        geolocator = Nominatim(user_agent="doha_v7")
-        location = geolocator.geocode(address)
-        if not location: lat, lng = 37.367, 127.108
-        else: lat, lng = location.latitude, location.longitude
-    except: lat, lng = 37.367, 127.108
+        url = "https://news.google.com/rss/search?q=소상공인+자영업&hl=ko&gl=KR&ceid=KR:ko"
+        feed = feedparser.parse(url)
+        return feed.entries[:5] # 최신 5개만
+    except:
+        return []
 
-    url = "http://apis.data.go.kr/B553077/api/open/sdsc2/storeListInRadius"
-    params = {"ServiceKey": MY_KEY, "type": "json", "radius": "500", "cx": lng, "cy": lat, "numOfRows": 300, "pageNo": 1}
-    count = 0
-    try:
-        res = requests.get(url, params=params, timeout=5)
-        data = res.json()
-        if "body" in data and "items" in data["body"]:
-            for item in data["body"]["items"]:
-                if keyword in (item.get('indsMclsNm','')+item.get('bizesNm','')): count += 1
-    except: pass
-    if count == 0: count = random.randint(8, 20)
-    return lat, lng, count
+def get_agri_price():
+    # 실제 API 연동 전에는 '시뮬레이션 데이터'로 작동 (변동폭 보여주기 위함)
+    # 나중에 공공데이터포털 '농산물 유통 정보(KAMIS)' API 붙이면 실시간 됨
+    items = ["배추(1포기)", "무(1개)", "양파(1kg)", "대파(1kg)", "청상추(100g)"]
+    prices = {}
+    for item in items:
+        base = random.randint(1500, 5000)
+        change = random.randint(-500, 500)
+        prices[item] = {"price": base, "change": change}
+    return prices
+
+def get_today_fortune():
+    fortunes = [
+        "오늘은 귀인을 만날 운세입니다. 손님에게 친절하세요!",
+        "금전운이 트이는 날입니다. 재고 관리에 신경 쓰세요.",
+        "예상치 못한 지출이 생길 수 있으니 꼼꼼히 체크하세요.",
+        "경쟁자보다 한 발 앞서 나가는 아이디어가 떠오를 겁니다.",
+        "건강 관리가 재산입니다. 오늘은 일찍 퇴근해보세요."
+    ]
+    return random.choice(fortunes)
 
 # -----------------------------------------------------------------------------
 # [메인] 앱 실행
 # -----------------------------------------------------------------------------
 set_style()
 
-st.title("🏙️ DOHA 비즈니스 파트너")
-st.markdown("**사장님의 성공 창업과 지출 방어를 위한 올인원 솔루션**")
+st.title("🥕 DOHA 사장님 비서")
+st.caption(f"오늘 날짜: {datetime.now().strftime('%Y년 %m월 %d일')}")
 
-# 탭 구성 (핵심 변경 포인트!)
-tab1, tab2, tab3 = st.tabs(["📊 예비 창업자 (상권분석)", "🏪 기존 사업자 (비용진단)", "🧮 데일리 계산기"])
+# 탭 메뉴 구성
+tab1, tab2, tab3, tab4 = st.tabs(["🏠 데일리 홈", "🥕 전국 당근검색", "⏰ 직원 출퇴근", "🏥 내 가게 진단"])
 
 # =============================================================================
-# [TAB 1] 예비 창업자용 (기존 상권분석)
+# [TAB 1] 데일리 홈 (후킹 요소 모음)
 # =============================================================================
 with tab1:
-    st.info("💡 창업 예정인 지역의 경쟁 강도와 예상 매출을 분석해 드립니다.")
+    # 1. 오늘의 운세 & 뉴스
+    col1, col2 = st.columns([1, 1.5])
     
-    c1, c2 = st.columns(2)
-    addr = c1.text_input("분석할 주소 (도로명)", "경기도 성남시 분당구 느티로 16", key="t1_addr")
-    cate = c2.selectbox("창업 예정 업종", ["음식/한식", "음식/카페", "소매/편의점", "서비스/미용"], key="t1_cat")
+    with col1:
+        st.subheader("🍀 오늘의 장사 운세")
+        st.info(f"daily: {get_today_fortune()}")
+        
+        st.subheader("🥬 오늘 농산물 시세 (도매)")
+        agri_data = get_agri_price()
+        for item, val in agri_data.items():
+            color = "red" if val['change'] > 0 else "blue"
+            sign = "▲" if val['change'] > 0 else "▼"
+            st.markdown(f"**{item}**: {val['price']:,}원 <span style='color:{color}'>({sign}{abs(val['change'])})</span>", unsafe_allow_html=True)
+
+    with col2:
+        st.subheader("📰 소상공인 주요 뉴스")
+        news_list = get_news()
+        if news_list:
+            for news in news_list:
+                st.markdown(f"""
+                <div class='news-card'>
+                <a href='{news.link}' target='_blank'>{news.title}</a><br>
+                <small>{news.published[:16]}</small>
+                </div>
+                """, unsafe_allow_html=True)
+        else:
+            st.write("뉴스 로딩 중...")
+
+    # 2. 일일 목표 매출 계산기
+    st.markdown("---")
+    st.subheader("🧮 오늘의 목표 매출 계산기")
+    c1, c2, c3 = st.columns(3)
+    fixed = c1.number_input("한 달 고정지출 (월세+인건비+기타)", value=4500000, step=10000)
+    margin = c2.slider("내 가게 마진율 (%)", 10, 50, 25)
+    days = c3.number_input("이번 달 영업일 수", 26)
     
-    if st.button("🚀 상권분석 시작 (Tab 1)", key="btn1"):
-        kw = cate.split("/")[0]
-        lat, lng, cnt = get_real_store_count(addr, kw)
-        
-        st.subheader(f"📍 {cate} 업종 분석 결과")
-        col1, col2, col3 = st.columns(3)
-        col1.metric("경쟁 점포수 (500m)", f"{cnt}개")
-        col2.metric("예상 월평균 매출", "1,850만원") # 시뮬레이션 값
-        col3.metric("권장 월세 상한", "270만원")
-        
-        st.bar_chart(pd.DataFrame({"내 상권": [cnt], "지역 평균": [35]}, index=["업소수"]))
-        st.success(f"전문가 의견: 경쟁 강도가 {'높습니다' if cnt > 30 else '적절합니다'}. 차별화 전략이 필요합니다.")
-        
-        # Tab 1 하단 보험 DB 확보
-        st.markdown("---")
-        st.markdown("#### 🛡️ 창업 전 '화재보험' 가견적 받아보기")
-        with st.form("form_tab1"):
-            n = st.text_input("성명", key="f1_n")
-            p = st.text_input("연락처", key="f1_p")
-            if st.form_submit_button("📨 무료 견적 요청"):
-                s, m = send_email_safe(n, p, "미입력", "신규창업 견적 요청", "무관", "창업문의")
-                if s: st.success("신청 완료! 연락드리겠습니다.")
-                else: st.error(f"전송 실패: {m}")
+    if days > 0 and margin > 0:
+        target = (fixed / days) / (margin / 100)
+        st.success(f"사장님, 오늘은 최소 **{int(target):,}원** 팔아야 본전입니다! 화이팅하세요!")
 
 # =============================================================================
-# [TAB 2] 기존 사업자용 (비용 진단 & 보험료 다이어트) -> 여기가 핵심!
+# [TAB 2] 당근마켓 전국 검색 (킬러 기능)
 # =============================================================================
 with tab2:
-    st.markdown("### 🏥 내 가게 고정비 건강검진")
+    st.markdown("### 🥕 당근마켓 전국 매물 찾기")
     st.markdown("""
-    <div class='info-box'>
-    <b>"사장님, 혹시 옆 가게보다 보험료 2배 더 내고 계신 건 아닌가요?"</b><br>
-    불필요한 특약을 뺀 '다이렉트 적정 보험료'와 현재 납부액을 비교해 드립니다.
-    </div>
-    """, unsafe_allow_html=True)
+    당근마켓 앱에서는 '내 동네'만 보이죠?  
+    DOHA에서는 **전국에 올라온 모든 꿀매물**을 한 번에 찾을 수 있습니다.  
+    (중고 주방기기, 인테리어 소품 구할 때 최고!)
+    """)
     
-    col1, col2 = st.columns(2)
-    current_ins = col1.number_input("현재 월 화재보험료 (원)", value=50000, step=1000)
-    store_size = col2.number_input("매장 평수 (평)", value=20, step=1)
+    keyword = st.text_input("찾으시는 물건을 입력하세요 (예: 업소용 냉장고, 포스기)", "")
     
-    if st.button("💰 내 보험료 진단하기", key="btn2"):
-        # 진단 로직 (단순하지만 강력하게)
-        standard_price = store_size * 1000 + 10000 # 평당 1000원 + 기본료 1만원 가정
-        diff = current_ins - standard_price
-        
-        c1, c2 = st.columns(2)
-        c1.metric("DOHA 권장 적정료", f"{standard_price:,}원")
-        c2.metric("예상 절감액 (월)", f"{diff:,}원", delta_color="inverse")
-        
-        if diff > 10000:
+    if st.button("🔍 전국 당근 뒤지기"):
+        if keyword:
+            # 구글 검색 트릭 사용 (site:daangn.com)
+            search_url = f"https://www.google.com/search?q=site:daangn.com/articles+{keyword}&tbs=qdr:m" # 최근 1달 내 검색
             st.markdown(f"""
-            <div class='warning-box'>
-            🚨 <b>진단 결과: [과다 지출]</b><br>
-            사장님은 적정 수준보다 <b>매월 약 {diff:,}원</b>을 더 내고 계십니다.<br>
-            1년이면 <b>{diff*12:,}원</b>을 버리는 셈입니다. 리모델링이 시급합니다.
+            <div style='background-color:#fff3cd; padding:20px; border-radius:10px; text-align:center;'>
+            <h3>👇 아래 링크를 클릭하세요!</h3>
+            <a href="{search_url}" target="_blank" style="font-size:20px; font-weight:bold; color:#ff6f0f; text-decoration:none;">
+            👉 '{keyword}' 전국 매물 보러가기 (클릭)
+            </a>
+            <br><br>
+            <small>* 구글 검색 엔진을 통해 전국 당근마켓 게시글을 모아서 보여줍니다.</small>
             </div>
             """, unsafe_allow_html=True)
         else:
-            st.success("✅ 진단 결과: [적정] 합리적으로 잘 가입하셨습니다!")
-
-        # Tab 2 하단 상담 신청 (강력한 Hook)
-        st.markdown("---")
-        st.subheader("📉 보험료 다이어트 상담 신청")
-        with st.form("form_tab2"):
-            st.write("아래 정보를 남겨주시면, 줄어든 보험료 견적서를 보내드립니다.")
-            row1_1, row1_2 = st.columns(2)
-            name_t2 = row1_1.text_input("성명", key="f2_n")
-            phone_t2 = row1_2.text_input("연락처", key="f2_p")
-            req_t2 = st.text_area("요청사항", value=f"{store_size}평 매장입니다. {current_ins}원 내는데 얼마나 줄일 수 있나요?")
-            
-            if st.form_submit_button("📨 보험료 줄이기 (상담신청)"):
-                success, msg = send_email_safe(name_t2, phone_t2, "미입력", req_t2, "상시", "보험료진단")
-                if success: st.balloons(); st.success("신청되었습니다! 분석 후 연락드리겠습니다.")
-                else: st.error(msg)
+            st.warning("검색어를 입력해주세요.")
 
 # =============================================================================
-# [TAB 3] 사장님 데일리 계산기 (재방문 유도용)
+# [TAB 3] 직원 출퇴근부 (간편 기능)
 # =============================================================================
 with tab3:
-    st.markdown("### 🧮 오늘 얼마나 팔아야 본전일까?")
-    st.info("매일 아침, 오늘의 목표 매출을 계산해보세요.")
+    st.subheader("⏰ 직원 출퇴근 기록기")
+    st.caption("※ 데이터는 임시 저장됩니다. (화면 새로고침 시 초기화)")
     
-    c1, c2, c3 = st.columns(3)
-    fixed_cost = c1.number_input("월 고정비 합계 (월세+인건비 등)", value=4500000)
-    margin_rate = c2.slider("마진율 (%)", 10, 50, 25)
-    days = c3.number_input("영업 일수", 25)
-    
-    daily_target = (fixed_cost / days) / (margin_rate / 100)
-    
-    st.markdown("---")
-    st.metric("📅 오늘 달성해야 할 최소 매출", f"{int(daily_target):,}원")
-    
-    # 계산기 밑에도 은근슬쩍 보험 광고
-    st.markdown("<br><br>", unsafe_allow_html=True)
-    st.markdown("""
-    <div style='font-size:0.8rem; color:#666; text-align:center;'>
-    고정비를 줄이는 가장 쉬운 방법은 보험료 점검입니다. (Tab 2에서 확인하세요)
-    </div>
-    """, unsafe_allow_html=True)
+    if 'attendance' not in st.session_state:
+        st.session_state.attendance = []
 
-# -----------------------------------------------------------------------------
-# 사이드바 (공통 안내)
-# -----------------------------------------------------------------------------
-with st.sidebar:
-    st.image("https://images.unsplash.com/photo-1556761175-5973dc0f32e7?ixlib=rb-1.2.1&auto=format&fit=crop&w=800&q=80", caption="DOHA PARTNERS")
-    st.markdown("### 🔧 시스템 상태")
-    if "smtp" in st.secrets: st.success("메일 서버 연결됨")
-    else: st.error("메일 설정 필요")
+    c1, c2 = st.columns(2)
+    emp_name = c1.text_input("직원 이름")
+    action = c2.selectbox("구분", ["출근", "퇴근", "외출", "복귀"])
     
+    if st.button("기록하기"):
+        if emp_name:
+            now = datetime.now().strftime("%H시 %M분")
+            st.session_state.attendance.append(f"[{now}] {emp_name} : {action}")
+            st.success("기록되었습니다.")
+        else:
+            st.warning("이름을 입력하세요.")
+            
+    # 기록 리스트 출력
     st.markdown("---")
-    st.info("문의: 010-XXXX-XXXX")
+    st.write("📝 **오늘의 기록**")
+    for log in st.session_state.attendance[::-1]: # 최신순
+        st.text(log)
+
+# =============================================================================
+# [TAB 4] 내 가게 진단 (수익 모델)
+# =============================================================================
+with tab4:
+    st.header("🏥 사장님 고정비/보험 무료 진단")
+    st.info("매일 계산기 두드리시죠? 줄일 수 있는 돈은 '보험료' 뿐입니다.")
+    
+    c1, c2 = st.columns(2)
+    curr_fee = c1.number_input("현재 월 화재보험료", value=50000)
+    py = c2.number_input("매장 평수", value=20)
+    
+    if st.button("💰 내 보험료 거품 확인"):
+        std = py * 1000 + 10000
+        diff = curr_fee - std
+        
+        if diff > 10000:
+            st.error(f"🚨 진단: 매월 약 {diff:,}원을 더 내고 계십니다! (1년 {diff*12:,}원 손해)")
+        else:
+            st.success("✅ 진단: 적정하게 잘 내고 계십니다.")
+            
+    st.markdown("---")
+    st.subheader("📉 보험료 다이어트 / 무료 견적 신청")
+    with st.form("ins_form"):
+        n = st.text_input("성명")
+        p = st.text_input("연락처")
+        req = st.text_area("요청사항 (예: 보험료가 너무 비싸요)")
+        if st.form_submit_button("📨 무료 상담 신청"):
+            s, m = send_email_safe(n, p, "미입력", req, "보험진단")
+            if s: st.balloons(); st.success("신청 완료! 곧 연락드리겠습니다.")
+            else: st.error(m)
