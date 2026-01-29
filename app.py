@@ -1,8 +1,6 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import matplotlib.pyplot as plt
-import matplotlib.font_manager as fm
 import requests
 from geopy.geocoders import Nominatim
 import os
@@ -15,273 +13,236 @@ from email.mime.text import MIMEText
 # [0] 페이지 설정
 # -----------------------------------------------------------------------------
 st.set_page_config(
-    page_title="DOHA ANALYSIS (Final)",
+    page_title="DOHA 비즈니스 파트너",
     page_icon="🏙️",
     layout="wide",
     initial_sidebar_state="collapsed"
 )
 
 # -----------------------------------------------------------------------------
-# [기능 1] 메일 전송 엔진 (포트 587 변경 + 정밀 진단)
+# [기능 1] 메일 전송 엔진 (안전장치 포함)
 # -----------------------------------------------------------------------------
-def send_email(name, phone, client_email, request_text, pref_time):
-    # 1. 설정 확인
+def send_email_safe(name, phone, client_email, request_text, pref_time, type_tag):
     if "smtp" not in st.secrets:
-        st.error("🚨 [설정 오류] Secrets 설정이 없습니다!")
-        return False
+        return False, "Secrets 설정이 비어있습니다."
 
-    sender = st.secrets["smtp"]["email"]
-    pw = st.secrets["smtp"]["password"]
-    
-    # 2. 메일 작성
-    subject = f"🔥 [DOHA 상담요청] {name}님 ({pref_time})"
+    sender = st.secrets["smtp"].get("email", "")
+    pw = st.secrets["smtp"].get("password", "")
+
+    if not sender or not pw:
+        return False, "이메일 설정 오류"
+
+    subject = f"🔥 [DOHA {type_tag}] {name}님 상담신청"
     body = f"""
-    [DOHA ANALYSIS 신규 상담 신청]
-    
+    [DOHA {type_tag} 신청서]
     1. 고객명 : {name}
     2. 연락처 : {phone}
     3. 이메일 : {client_email}
     4. 희망시간: {pref_time}
-    5. 요청사항: 
-    {request_text}
-    
-    ------------------------------------------------
-    * 이 메일은 DOHA 웹사이트에서 자동 발송되었습니다.
+    5. 요청사항: {request_text}
     """
-
     msg = MIMEText(body)
     msg['Subject'] = subject
     msg['From'] = sender
     msg['To'] = sender 
 
-    # 3. 전송 시도 (포트 587 + starttls 방식 사용)
     try:
-        # SMTP 서버 연결 (타임아웃 10초 설정)
-        server = smtplib.SMTP('smtp.gmail.com', 587, timeout=10)
-        server.starttls() # 보안 연결 시작
-        server.login(sender, pw) # 로그인
-        server.sendmail(sender, sender, msg.as_string()) # 전송
-        server.quit()
-        return True
+        with smtplib.SMTP('smtp.gmail.com', 587, timeout=10) as server:
+            server.ehlo()
+            server.starttls()
+            server.login(sender, pw)
+            server.sendmail(sender, sender, msg.as_string())
+        return True, "성공"
     except Exception as e:
-        st.error(f"🚨 [메일 전송 실패] 원인: {e}")
-        return False
+        return False, f"전송 실패: {e}"
 
 # -----------------------------------------------------------------------------
-# [기능 2] 스타일 & 한글 폰트
+# [기능 2] 스타일
 # -----------------------------------------------------------------------------
 def set_style():
-    font_path = "NanumGothic.ttf"
-    if not os.path.exists(font_path):
-        url = "https://github.com/google/fonts/raw/main/ofl/nanumgothic/NanumGothic-Regular.ttf"
-        try:
-            response = requests.get(url)
-            with open("NanumGothic.ttf", "wb") as f:
-                f.write(response.content)
-        except: pass
-    
-    if os.path.exists(font_path):
-        fm.fontManager.addfont(font_path)
-        plt.rc('font', family='NanumGothic')
-    plt.rcParams['axes.unicode_minus'] = False
-
     st.markdown("""
         <style>
         .main { background-color: #f8f9fa; }
-        h1 { color: #004aad; font-weight: 800; } 
-        h2, h3 { color: #004aad; }
-        .stButton>button { 
-            background-color: #004aad; color: white; border-radius: 10px; 
-            font-weight: bold; width: 100%; height: 50px;
+        h1, h2, h3 { color: #004aad; }
+        .stTabs [data-baseweb="tab-list"] { gap: 10px; }
+        .stTabs [data-baseweb="tab"] {
+            height: 50px; white-space: pre-wrap; background-color: white;
+            border-radius: 5px; box-shadow: 1px 1px 3px rgba(0,0,0,0.1);
+        }
+        .stTabs [aria-selected="true"] {
+            background-color: #004aad !important; color: white !important;
         }
         .metric-card {
             background-color: white; padding: 20px; border-radius: 10px;
             box-shadow: 2px 2px 10px rgba(0,0,0,0.1); text-align: center;
             color: black !important;
         }
-        .metric-card h3 { color: #555 !important; font-size: 1rem; margin-bottom: 5px; }
-        .metric-card h2 { color: #004aad !important; font-size: 2rem; font-weight: bold; margin: 0;}
-        .metric-card p { color: #666 !important; font-size: 0.9rem; margin-top: 5px; }
         .info-box {
             background-color: #e8f0fe; padding: 15px; border-radius: 10px;
-            border-left: 5px solid #004aad; margin-bottom: 20px;
-            color: black !important;
+            border-left: 5px solid #004aad; color: black !important; margin-bottom: 10px;
         }
-        .result-text {
-            background-color: #fff3cd; padding: 10px; border-radius: 5px;
-            font-size: 0.9rem; color: #856404; margin-top: 10px;
+        .warning-box {
+            background-color: #fff3cd; padding: 15px; border-radius: 10px;
+            border-left: 5px solid #ffc107; color: black !important; margin-bottom: 10px;
         }
         </style>
     """, unsafe_allow_html=True)
 
 # -----------------------------------------------------------------------------
-# [기능 3] 데이터 엔진
+# [기능 3] 데이터 엔진 (상권분석용)
 # -----------------------------------------------------------------------------
 MY_KEY = "812fa5d3b23f43b70156810df8185abaee5960b4f233858a3ccb3eb3844c86ff"
 
 def get_real_store_count(address, keyword):
-    geolocator = Nominatim(user_agent="doha_final_v5")
-    lat, lng = 37.367, 127.108 
-    
     try:
+        geolocator = Nominatim(user_agent="doha_v7")
         location = geolocator.geocode(address)
-        if location: lat, lng = location.latitude, location.longitude
-    except: pass
+        if not location: lat, lng = 37.367, 127.108
+        else: lat, lng = location.latitude, location.longitude
+    except: lat, lng = 37.367, 127.108
 
     url = "http://apis.data.go.kr/B553077/api/open/sdsc2/storeListInRadius"
     params = {"ServiceKey": MY_KEY, "type": "json", "radius": "500", "cx": lng, "cy": lat, "numOfRows": 300, "pageNo": 1}
-    
     count = 0
     try:
-        response = requests.get(url, params=params)
-        data = response.json()
+        res = requests.get(url, params=params, timeout=5)
+        data = res.json()
         if "body" in data and "items" in data["body"]:
             for item in data["body"]["items"]:
-                full_name = (item.get('indsMclsNm','') + item.get('indsSclsNm','') + item.get('bizesNm',''))
-                if keyword in full_name: count += 1
+                if keyword in (item.get('indsMclsNm','')+item.get('bizesNm','')): count += 1
     except: pass
-    
     if count == 0: count = random.randint(8, 20)
     return lat, lng, count
-
-# -----------------------------------------------------------------------------
-# [기능 4] 전문가 소견
-# -----------------------------------------------------------------------------
-def generate_expert_opinion(address, category, count, rent_ratio):
-    risk = "위험" if rent_ratio > 15 else "안정"
-    return f"""
-    **[종합 분석 결과]**
-    의뢰하신 **{address}** 상권의 **{category}** 업종 분석 결과입니다.
-    
-    현재 반경 500m 내 경쟁 점포는 약 **{count}개**로 파악되며, 이는 상권 내에서 
-    **{'치열한 경쟁' if count > 30 else '적절한 경쟁'}** 구도를 보이고 있습니다.
-    
-    가장 중요한 지표인 **월세 비중은 {rent_ratio:.1f}%**로, 손익분기점 관리 기준인 15%를 
-    **{'초과하여 고정비 리스크 관리가 시급' if risk == '위험' else '준수하고 있어 긍정적'}**입니다.
-    
-    **[전문가 제언]**
-    단순한 매출 증대보다 중요한 것은 **'예기치 못한 지출 방어'**입니다.
-    특히 요식업/소매업에서 빈번한 화재 및 배상책임 사고는 한 번의 발생으로도 폐업에 이를 수 있습니다.
-    현재의 현금 흐름을 지키기 위해, **최소한의 비용으로 최대의 보장**을 받는 화재보험 점검을 강력히 권장합니다.
-    """
 
 # -----------------------------------------------------------------------------
 # [메인] 앱 실행
 # -----------------------------------------------------------------------------
 set_style()
 
+st.title("🏙️ DOHA 비즈니스 파트너")
+st.markdown("**사장님의 성공 창업과 지출 방어를 위한 올인원 솔루션**")
+
+# 탭 구성 (핵심 변경 포인트!)
+tab1, tab2, tab3 = st.tabs(["📊 예비 창업자 (상권분석)", "🏪 기존 사업자 (비용진단)", "🧮 데일리 계산기"])
+
 # =============================================================================
-# 🔧 [시스템 진단 패널] - 여기가 핵심입니다!
+# [TAB 1] 예비 창업자용 (기존 상권분석)
 # =============================================================================
-with st.expander("🔧 시스템 상태 확인 (사장님 전용)", expanded=True):
+with tab1:
+    st.info("💡 창업 예정인 지역의 경쟁 강도와 예상 매출을 분석해 드립니다.")
+    
     c1, c2 = st.columns(2)
-    # 1. 비밀번호 설정 확인
-    if "smtp" in st.secrets and "email" in st.secrets["smtp"]:
-        my_email = st.secrets["smtp"]["email"]
-        c1.success(f"✅ 메일 설정 완료! ({my_email[:3]}***@gmail.com)")
-    else:
-        c1.error("❌ 메일 설정(Secrets)이 비어있습니다!")
-        c1.info("Streamlit Settings -> Secrets 에 내용을 채워주세요.")
+    addr = c1.text_input("분석할 주소 (도로명)", "경기도 성남시 분당구 느티로 16", key="t1_addr")
+    cate = c2.selectbox("창업 예정 업종", ["음식/한식", "음식/카페", "소매/편의점", "서비스/미용"], key="t1_cat")
+    
+    if st.button("🚀 상권분석 시작 (Tab 1)", key="btn1"):
+        kw = cate.split("/")[0]
+        lat, lng, cnt = get_real_store_count(addr, kw)
         
-    # 2. 정부 데이터 키 확인
-    if MY_KEY:
-        c2.success("✅ 정부 데이터 키 적용됨")
-    else:
-        c2.error("❌ 인증키 없음")
+        st.subheader(f"📍 {cate} 업종 분석 결과")
+        col1, col2, col3 = st.columns(3)
+        col1.metric("경쟁 점포수 (500m)", f"{cnt}개")
+        col2.metric("예상 월평균 매출", "1,850만원") # 시뮬레이션 값
+        col3.metric("권장 월세 상한", "270만원")
+        
+        st.bar_chart(pd.DataFrame({"내 상권": [cnt], "지역 평균": [35]}, index=["업소수"]))
+        st.success(f"전문가 의견: 경쟁 강도가 {'높습니다' if cnt > 30 else '적절합니다'}. 차별화 전략이 필요합니다.")
+        
+        # Tab 1 하단 보험 DB 확보
+        st.markdown("---")
+        st.markdown("#### 🛡️ 창업 전 '화재보험' 가견적 받아보기")
+        with st.form("form_tab1"):
+            n = st.text_input("성명", key="f1_n")
+            p = st.text_input("연락처", key="f1_p")
+            if st.form_submit_button("📨 무료 견적 요청"):
+                s, m = send_email_safe(n, p, "미입력", "신규창업 견적 요청", "무관", "창업문의")
+                if s: st.success("신청 완료! 연락드리겠습니다.")
+                else: st.error(f"전송 실패: {m}")
 
-# 모바일 안내
-st.info("👆 **모바일 사용자:** 왼쪽 상단 화살표( > )를 눌러야 정보를 입력할 수 있습니다.")
+# =============================================================================
+# [TAB 2] 기존 사업자용 (비용 진단 & 보험료 다이어트) -> 여기가 핵심!
+# =============================================================================
+with tab2:
+    st.markdown("### 🏥 내 가게 고정비 건강검진")
+    st.markdown("""
+    <div class='info-box'>
+    <b>"사장님, 혹시 옆 가게보다 보험료 2배 더 내고 계신 건 아닌가요?"</b><br>
+    불필요한 특약을 뺀 '다이렉트 적정 보험료'와 현재 납부액을 비교해 드립니다.
+    </div>
+    """, unsafe_allow_html=True)
+    
+    col1, col2 = st.columns(2)
+    current_ins = col1.number_input("현재 월 화재보험료 (원)", value=50000, step=1000)
+    store_size = col2.number_input("매장 평수 (평)", value=20, step=1)
+    
+    if st.button("💰 내 보험료 진단하기", key="btn2"):
+        # 진단 로직 (단순하지만 강력하게)
+        standard_price = store_size * 1000 + 10000 # 평당 1000원 + 기본료 1만원 가정
+        diff = current_ins - standard_price
+        
+        c1, c2 = st.columns(2)
+        c1.metric("DOHA 권장 적정료", f"{standard_price:,}원")
+        c2.metric("예상 절감액 (월)", f"{diff:,}원", delta_color="inverse")
+        
+        if diff > 10000:
+            st.markdown(f"""
+            <div class='warning-box'>
+            🚨 <b>진단 결과: [과다 지출]</b><br>
+            사장님은 적정 수준보다 <b>매월 약 {diff:,}원</b>을 더 내고 계십니다.<br>
+            1년이면 <b>{diff*12:,}원</b>을 버리는 셈입니다. 리모델링이 시급합니다.
+            </div>
+            """, unsafe_allow_html=True)
+        else:
+            st.success("✅ 진단 결과: [적정] 합리적으로 잘 가입하셨습니다!")
 
-with st.sidebar:
-    st.header("📝 DOHA ANALYSIS 입력")
-    st.markdown("---")
-    input_address = st.text_input("📍 주소 (도로명)", "경기도 성남시 분당구 느티로 16")
-    input_category = st.selectbox("업종 선택", ["음식/한식", "음식/카페", "음식/치킨", "소매/편의점", "서비스/미용"])
-    input_rent = st.number_input("💰 월세 (원)", value=3000000, step=100000)
-    input_sales = st.number_input("📈 목표 월매출 (원)", value=15000000, step=500000)
-    input_households = st.number_input("🏠 배후 세대수", value=2500, step=100)
-    st.markdown("<br>", unsafe_allow_html=True)
-    analyze_btn = st.button("🚀 상권분석 시작하기")
+        # Tab 2 하단 상담 신청 (강력한 Hook)
+        st.markdown("---")
+        st.subheader("📉 보험료 다이어트 상담 신청")
+        with st.form("form_tab2"):
+            st.write("아래 정보를 남겨주시면, 줄어든 보험료 견적서를 보내드립니다.")
+            row1_1, row1_2 = st.columns(2)
+            name_t2 = row1_1.text_input("성명", key="f2_n")
+            phone_t2 = row1_2.text_input("연락처", key="f2_p")
+            req_t2 = st.text_area("요청사항", value=f"{store_size}평 매장입니다. {current_ins}원 내는데 얼마나 줄일 수 있나요?")
+            
+            if st.form_submit_button("📨 보험료 줄이기 (상담신청)"):
+                success, msg = send_email_safe(name_t2, phone_t2, "미입력", req_t2, "상시", "보험료진단")
+                if success: st.balloons(); st.success("신청되었습니다! 분석 후 연락드리겠습니다.")
+                else: st.error(msg)
 
-st.title("🏙️ DOHA ANALYSIS")
-st.markdown("**세상에 없던 상권분석 프로그램 [BETA VER]**")
-st.markdown("---")
-
-if analyze_btn:
-    with st.spinner("🔍 빅데이터 엔진이 상권을 분석하고 있습니다..."):
-        time.sleep(1.0)
-        keyword = input_category.split("/")[0] if "/" in input_category else input_category
-        lat, lng, count = get_real_store_count(input_address, keyword)
-
-    # 1. 정보요약
-    st.subheader("1️⃣ 상권분석 정보요약")
-    rent_ratio = (input_rent / input_sales) * 100
-    risk_level = "위험 🚨" if rent_ratio > 15 else "적정 ✅"
+# =============================================================================
+# [TAB 3] 사장님 데일리 계산기 (재방문 유도용)
+# =============================================================================
+with tab3:
+    st.markdown("### 🧮 오늘 얼마나 팔아야 본전일까?")
+    st.info("매일 아침, 오늘의 목표 매출을 계산해보세요.")
     
     c1, c2, c3 = st.columns(3)
-    c1.markdown(f"<div class='metric-card'><h3>경쟁점포</h3><h2>{count}개</h2><p>반경 500m</p></div>", unsafe_allow_html=True)
-    c2.markdown(f"<div class='metric-card'><h3>월세 비중</h3><h2>{rent_ratio:.1f}%</h2><p>{risk_level}</p></div>", unsafe_allow_html=True)
-    c3.markdown(f"<div class='metric-card'><h3>배후 세대</h3><h2>{input_households:,}</h2><p>거주 세대수</p></div>", unsafe_allow_html=True)
-    st.markdown("<br>", unsafe_allow_html=True)
-
-    # 2. 그래프 분석 (문구 포함)
-    st.subheader("2️⃣ 예상 매출 분석")
-    months = ["1월", "2월", "3월", "4월", "5월", "6월"]
-    base = input_sales / 10000 
-    my_sales = [base * np.random.uniform(0.9, 1.2) for _ in range(6)]
-    avg_sales = [base * np.random.uniform(0.8, 1.0) for _ in range(6)]
-    st.area_chart(pd.DataFrame({"내 점포": my_sales, "상권 평균": avg_sales}, index=months), color=["#004aad", "#a8c5e6"])
-    st.markdown(f"<div class='result-text'>💡 <b>분석 결과:</b> {input_category} 업종은 4월 이후 매출 상승세가 예상됩니다.</div>", unsafe_allow_html=True)
-
-    col_a, col_b = st.columns(2)
-    with col_a:
-        st.subheader("3️⃣ 배달/주문 분석")
-        st.bar_chart(pd.DataFrame({"주문수": [250, 410, 180]}, index=["점심", "저녁", "심야"]), color="#004aad")
-        st.markdown("<div class='result-text'>💡 <b>배달 팁:</b> 저녁 시간대(17시~21시) 주문이 전체의 48%를 차지합니다.</div>", unsafe_allow_html=True)
-        
-    with col_b:
-        st.subheader("4️⃣ 유동인구 성별")
-        st.bar_chart(pd.DataFrame({"성별": [45, 55]}, index=["남성", "여성"]), color="#ff9999")
-        st.markdown("<div class='result-text'>💡 <b>타겟 고객:</b> 30대~40대 여성 유동인구 비중이 높습니다.</div>", unsafe_allow_html=True)
-
-    # 5. 유사 상권 비교
-    st.subheader("5️⃣ 유사 상권 비교")
-    comp_data = pd.DataFrame({"업소수": [count, int(count*1.2), int(count*0.8), 35]}, index=["내 상권", "A상권", "B상권", "평균"])
-    st.bar_chart(comp_data, color="#004aad")
-    st.markdown(f"<div class='result-text'>💡 <b>경쟁 강도:</b> 경기도 평균 대비 경쟁점이 {'많습니다(과열)' if count > 35 else '적습니다(기회)'}.</div>", unsafe_allow_html=True)
-
-    # 6. 전문가 소견
+    fixed_cost = c1.number_input("월 고정비 합계 (월세+인건비 등)", value=4500000)
+    margin_rate = c2.slider("마진율 (%)", 10, 50, 25)
+    days = c3.number_input("영업 일수", 25)
+    
+    daily_target = (fixed_cost / days) / (margin_rate / 100)
+    
     st.markdown("---")
-    st.subheader("6️⃣ 전문가 종합 소견 (DOHA Insight)")
-    st.info(generate_expert_opinion(input_address, input_category, count, rent_ratio))
+    st.metric("📅 오늘 달성해야 할 최소 매출", f"{int(daily_target):,}원")
+    
+    # 계산기 밑에도 은근슬쩍 보험 광고
+    st.markdown("<br><br>", unsafe_allow_html=True)
+    st.markdown("""
+    <div style='font-size:0.8rem; color:#666; text-align:center;'>
+    고정비를 줄이는 가장 쉬운 방법은 보험료 점검입니다. (Tab 2에서 확인하세요)
+    </div>
+    """, unsafe_allow_html=True)
 
-    # 7. 보험 신청 (안정형 Form)
+# -----------------------------------------------------------------------------
+# 사이드바 (공통 안내)
+# -----------------------------------------------------------------------------
+with st.sidebar:
+    st.image("https://images.unsplash.com/photo-1556761175-5973dc0f32e7?ixlib=rb-1.2.1&auto=format&fit=crop&w=800&q=80", caption="DOHA PARTNERS")
+    st.markdown("### 🔧 시스템 상태")
+    if "smtp" in st.secrets: st.success("메일 서버 연결됨")
+    else: st.error("메일 설정 필요")
+    
     st.markdown("---")
-    st.subheader("🛡️ [필수] 화재/배상책임보험 무료 견적 신청")
-    st.markdown("""<div class='info-box'><b>건물주 보험은 사장님을 지켜주지 않습니다.</b><br>최저가 다이렉트 설계를 무료로 받아보세요.</div>""", unsafe_allow_html=True)
-    
-    # 폼 대신 일반 입력창 사용 (오류 최소화)
-    st.markdown("#### 📋 1분 간편 상담 신청서")
-    
-    c1, c2 = st.columns(2)
-    name = c1.text_input("성명", key="name")
-    phone = c2.text_input("연락처 (010-XXXX-XXXX)", key="phone")
-    email = st.text_input("이메일 주소", key="email")
-    req_text = st.text_area("요청사항", key="req")
-    pref_time = st.selectbox("상담 희망 시간", ["오전 (09~12시)", "오후 (13~18시)", "저녁 (18시 이후)"], key="time")
-    
-    agree = st.checkbox("[(필수) 개인정보 수집 및 이용에 동의합니다.]", key="agree")
-    
-    # 전송 버튼
-    if st.button("📨 무료 견적 요청하기 (전송)", type="primary"):
-        if not agree:
-            st.warning("⚠️ 개인정보 수집에 동의해주세요.")
-        elif not name or not phone:
-            st.warning("⚠️ 성명과 연락처를 입력해주세요.")
-        else:
-            with st.spinner("서버와 통신 중입니다..."):
-                success = send_email(name, phone, email, req_text, pref_time)
-                
-            if success:
-                st.success(f"✅ {name}님, 신청이 완료되었습니다! (사장님 메일함을 확인하세요)")
-                st.balloons()
+    st.info("문의: 010-XXXX-XXXX")
