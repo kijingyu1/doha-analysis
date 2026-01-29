@@ -56,17 +56,10 @@ def set_style():
         .install-guide { background-color: #e3f2fd; padding: 15px; border-radius: 10px; border: 1px solid #90caf9; margin-bottom: 15px; color: #0d47a1; font-size: 0.9rem; }
         .visitor-badge { background-color: #333; color: #00ff00; padding: 10px; border-radius: 5px; font-family: 'Courier New', monospace; text-align: center; font-weight: bold; margin-top: 20px; }
         
-        .radio-link-btn {
-            display: block; width: 100%; padding: 10px; margin-top: 5px; margin-bottom: 15px;
-            background-color: #f1f3f5; border: 1px solid #ddd; border-radius: 5px;
-            text-align: center; color: #333; text-decoration: none; font-weight: bold;
-            transition: 0.3s; font-size: 0.9rem;
-        }
-        .radio-link-btn:hover { background-color: #e9ecef; color: #ff6f0f; }
-        
         /* 공지사항 스타일 */
         .notice-box { background-color: #fff3cd; color: #856404; padding: 15px; border-radius: 10px; border: 1px solid #ffeeba; margin-bottom: 20px; }
         
+        /* 장부 스타일 */
         .ledger-summary { background-color: white; padding: 15px; border-radius: 10px; border: 1px solid #ddd; text-align: center; }
         .ledger-val { font-size: 1.3rem; font-weight: bold; color: #333; }
         .ledger-label { font-size: 0.9rem; color: #666; }
@@ -133,7 +126,7 @@ def get_today_affirmation():
     random.seed(datetime.now().day)
     return random.choice(words)
 
-# [복구] 방문자 로그 관리
+# 방문자 로그
 VISITOR_FILE = "visitor_log.csv"
 def track_visitor():
     if not os.path.exists(VISITOR_FILE):
@@ -152,11 +145,11 @@ def get_visitor_count():
     if os.path.exists(VISITOR_FILE):
         try:
             df = pd.read_csv(VISITOR_FILE)
-            return len(df), df, df # df도 반환
+            return len(df), df, df 
         except: return 0, pd.DataFrame(), pd.DataFrame()
     return 0, pd.DataFrame(), pd.DataFrame()
 
-# [복구] 공지사항 관리
+# 공지사항
 NOTICE_FILE = "notice.txt"
 def load_notice():
     if os.path.exists(NOTICE_FILE):
@@ -166,6 +159,19 @@ def load_notice():
 def save_notice(text):
     with open(NOTICE_FILE, "w", encoding="utf-8") as f:
         f.write(text)
+
+# [NEW] 사장님 라디오 URL 저장/관리
+RADIO_URL_FILE = "radio_url.txt"
+def load_radio_url():
+    if os.path.exists(RADIO_URL_FILE):
+        with open(RADIO_URL_FILE, "r", encoding="utf-8") as f:
+            return f.read().strip()
+    # 기본값: 재즈 라디오 (잘 나온다고 확인된 것)
+    return "https://www.youtube.com/watch?v=5qap5aO4i9A"
+
+def save_radio_url(url):
+    with open(RADIO_URL_FILE, "w", encoding="utf-8") as f:
+        f.write(url)
 
 # 장부
 LEDGER_FILE = "ledger_data.csv"
@@ -209,6 +215,7 @@ if not st.session_state.logged_in:
     st.markdown("<br><br>", unsafe_allow_html=True)
     c1, c2, c3 = st.columns([1, 2, 1])
     with c2:
+        # 사장님 로고 URL
         LOGO_URL = "https://cdn-icons-png.flaticon.com/512/1995/1995515.png" 
         st.markdown(f"""<div class='login-box'><img src='{LOGO_URL}' style='width: 150px; margin-bottom: 20px; border-radius: 20px;'><p style='font-size: 1.1rem; font-weight: bold; color: #555;'>로그인</p></div>""", unsafe_allow_html=True)
         with st.expander("📲 카톡에서 들어오셨나요?"):
@@ -228,13 +235,10 @@ if not st.session_state.logged_in:
 with st.sidebar:
     st.write(f"👤 **{st.session_state.store_name}**님")
     st.markdown(f"<div class='visitor-badge'>VISITORS<br>{total_visitors:,}</div>", unsafe_allow_html=True)
-    
-    # [복구] 상세 방문자 로그
     with st.expander("🕵️‍♂️ 접속 로그 (상세)"):
         if not df_visitors_all.empty:
             st.dataframe(df_visitors_all.sort_values("timestamp", ascending=False).head(10), hide_index=True)
         else: st.write("기록 없음")
-        
     if st.button("로그아웃"):
         st.session_state.logged_in = False
         st.rerun()
@@ -242,7 +246,7 @@ with st.sidebar:
 st.markdown(f"""<h1>🥕 사장님 비서<br><span class='store-subtitle'>({st.session_state.store_name})</span></h1>""", unsafe_allow_html=True)
 st.markdown("""<div class='install-guide'><b>💡 꿀팁:</b> 카톡 말고 <b>[다른 브라우저로 열기]</b> 후 <b>[홈 화면에 추가]</b> 하세요!</div>""", unsafe_allow_html=True)
 
-# [복구] 공지사항 (관리자만 수정 가능)
+# 공지사항
 current_notice = load_notice()
 if st.session_state.store_name in ["admin", "관리자"]:
     with st.expander("📢 공지사항 수정 (관리자용)"):
@@ -254,13 +258,12 @@ if st.session_state.store_name in ["admin", "관리자"]:
 
 st.markdown(f"""<div class='notice-box'><b>📢 필독 공지:</b> {current_notice}</div>""", unsafe_allow_html=True)
 
-tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["🏠 데일리 홈", "🔍 전국 당근검색", "⏰ 직원 출퇴근", "🔥 화재보험 점검", "📻 실시간 라디오", "📒 사장님 장부"])
+tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["🏠 데일리 홈", "🔍 전국 당근검색", "⏰ 직원 출퇴근", "🔥 화재보험 점검", "📻 힐링 라디오", "📒 사장님 장부"])
 
-# [TAB 1] 데일리 홈
+# ... (Tab 1 ~ 4 생략, 위와 동일) ...
 with tab1:
     st.subheader("📰 오늘의 사장님 필수 뉴스")
     st.caption("※ 매일 09시, 12시, 18시, 21시 자동 업데이트")
-    
     news_list = get_real_google_news()
     if news_list:
         with st.container():
@@ -271,7 +274,6 @@ with tab1:
             st.markdown("</div>", unsafe_allow_html=True)
             now_str = datetime.now().strftime("%H시 %M분")
             st.markdown(f"<div class='news-update-time'>최근 갱신: {now_str} 기준</div>", unsafe_allow_html=True)
-            
     st.markdown("---")
     col_left, col_right = st.columns(2)
     with col_left:
@@ -355,44 +357,37 @@ with tab4:
             else: st.warning("정보를 입력하세요.")
 
 # =============================================================================
-# [TAB 5] 📻 실시간 라디오 (유튜브 연결 오류 해결)
+# [TAB 5] 📻 힐링 라디오 (사장님 유튜브 연동)
 # =============================================================================
 with tab5:
-    st.header("📻 실시간 공중파 라디오")
-    st.info("⚠️ 방송사 사정에 따라 앱 내 재생이 안 될 수 있습니다. 그럴 땐 아래 **'📺 바로 보기'** 버튼을 눌러주세요!")
+    st.header("📻 사장님 힐링 라디오")
+    st.caption("오늘도 수고 많으셨습니다. 노래 들으면서 힘내세요! 💪")
     
-    radio_type = st.radio("채널 선택", ["YTN 라디오 (24시간 뉴스)", "KBS Cool FM (보이는 라디오)", "TBS 교통방송", "재즈/팝 (Lofi)"], horizontal=True)
+    # 1. 저장된 URL 불러오기 (없으면 기본 재즈 라디오)
+    current_radio_url = load_radio_url()
     
-    # URL 및 ID 설정 (가장 최신 라이브 스트림)
-    ytn_url = "https://www.youtube.com/watch?v=GoXFbC1i1bw"
-    kbs_url = "https://www.youtube.com/watch?v=p4M-jO4n62w" # 링크가 자주 바뀜
-    tbs_url = "https://www.youtube.com/watch?v=Eqi9C5YQG6E"
-    jazz_url = "https://www.youtube.com/watch?v=5qap5aO4i9A"
-
-    if radio_type == "YTN 라디오 (24시간 뉴스)":
-        st.video(ytn_url)
-        st.markdown(f"<a href='{ytn_url}' target='_blank' class='radio-link-btn'>📺 YTN이 안 나오면 클릭 (유튜브로 연결)</a>", unsafe_allow_html=True)
+    # 2. 영상 재생
+    try:
+        st.video(current_radio_url)
+    except:
+        st.error("영상을 재생할 수 없습니다.")
         
-    elif radio_type == "KBS Cool FM (보이는 라디오)":
-        st.video(kbs_url)
-        st.markdown(f"<a href='{kbs_url}' target='_blank' class='radio-link-btn'>📺 KBS가 안 나오면 클릭 (유튜브로 연결)</a>", unsafe_allow_html=True)
+    st.info("💡 위 영상은 **유튜브 조회수**에 그대로 반영됩니다!")
 
-    elif radio_type == "TBS 교통방송":
-        st.video(tbs_url)
-        st.markdown(f"<a href='{tbs_url}' target='_blank' class='radio-link-btn'>📺 TBS가 안 나오면 클릭 (유튜브로 연결)</a>", unsafe_allow_html=True)
+    # 3. 관리자 전용: URL 변경 기능
+    if st.session_state.store_name in ["admin", "관리자"]:
+        st.markdown("---")
+        with st.expander("🛠️ [관리자] 방송 영상 바꾸기"):
+            st.markdown("**유튜브 영상 URL이나 플레이리스트 주소를 입력하세요.**")
+            new_url = st.text_input("새로운 유튜브 주소", current_radio_url)
+            if st.button("방송 송출 주소 변경"):
+                save_radio_url(new_url)
+                st.success("방송이 변경되었습니다! 모든 사장님들에게 이 영상이 송출됩니다.")
+                st.rerun()
 
-    elif radio_type == "재즈/팝 (Lofi)":
-        st.video(jazz_url)
-        st.caption("광고 없는 음악 방송입니다.")
-        
-    st.markdown("---")
-    st.subheader("📡 메이저 방송사 (앱 내 재생 불가 → 공식 연결)")
-    c1, c2 = st.columns(2)
-    with c1:
-        st.markdown("<a href='https://w3.sbs.co.kr/radio/gorealraMain.do' target='_blank' class='radio-link-btn'>🦍 SBS 고릴라 (파워FM/러브FM)</a>", unsafe_allow_html=True)
-    with c2:
-        st.markdown("<a href='https://mini.imbc.com/webapp_v3/mini.html' target='_blank' class='radio-link-btn'>Ⓜ️ MBC 미니 (표준FM/FM4U)</a>", unsafe_allow_html=True)
-
+# =============================================================================
+# [TAB 6] 📒 사장님 장부 (기존 유지)
+# =============================================================================
 with tab6:
     st.header("📒 사장님 간편 장부")
     st.caption("복잡한 기능은 뺐습니다. **입력하고, 조회하고, 엑셀로 받으세요.**")
