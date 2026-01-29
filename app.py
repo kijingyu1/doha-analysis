@@ -43,7 +43,7 @@ def set_style():
         .login-box { max-width: 400px; margin: 0 auto; padding: 40px; background-color: white; border-radius: 20px; text-align: center; }
         .install-guide { background-color: #e3f2fd; padding: 15px; border-radius: 10px; border: 1px solid #90caf9; margin-bottom: 15px; color: #0d47a1; font-size: 0.9rem; }
         
-        /* 방문자 카운터 스타일 */
+        /* 방문자 카운터 (관리자용) */
         .visitor-badge {
             background-color: #333; color: #00ff00; padding: 10px; border-radius: 5px;
             font-family: 'Courier New', monospace; text-align: center; font-weight: bold; margin-top: 20px;
@@ -74,7 +74,7 @@ def send_email_safe(name, phone, client_email, req_text, type_tag):
     except Exception as e: return False, f"전송 실패: {str(e)}"
 
 # -----------------------------------------------------------------------------
-# [기능 3] 데이터 엔진 & 방문자 추적
+# [기능 3] 데이터 엔진 & 접속 로그 관리
 # -----------------------------------------------------------------------------
 @st.cache_data(ttl=1800)
 def get_finance_data():
@@ -110,37 +110,28 @@ def get_today_fortune():
     random.seed(datetime.now().day)
     return random.choice(fortunes)
 
-# --- [NEW] 방문자 추적 로직 ---
-VISITOR_FILE = "visitor_log.csv"
+# --- [핵심] 접속 로그 시스템 (매장명 기록) ---
+LOGIN_LOG_FILE = "login_log_v2.csv"
 
-def track_visitor():
-    # 1. 파일이 없으면 생성
-    if not os.path.exists(VISITOR_FILE):
-        df = pd.DataFrame(columns=["timestamp", "date"])
-        df.to_csv(VISITOR_FILE, index=False)
+def log_login_event(store_name):
+    # 로그인 성공 시에만 기록
+    now = datetime.now()
+    new_row = {"timestamp": now.strftime("%Y-%m-%d %H:%M:%S"), "store": store_name}
     
-    # 2. 세션 상태를 확인하여 '이미 카운트된 방문자'인지 확인
-    if 'visitor_counted' not in st.session_state:
-        st.session_state.visitor_counted = True
+    # 기존 로그 불러오기 또는 생성
+    if os.path.exists(LOGIN_LOG_FILE):
+        df = pd.read_csv(LOGIN_LOG_FILE)
+    else:
+        df = pd.DataFrame(columns=["timestamp", "store"])
         
-        # 3. 새로운 방문자라면 기록 추가
-        now = datetime.now()
-        new_row = {"timestamp": now.strftime("%Y-%m-%d %H:%M:%S"), "date": now.strftime("%Y-%m-%d")}
-        
-        try:
-            df = pd.read_csv(VISITOR_FILE)
-            df = pd.concat([pd.DataFrame([new_row]), df], ignore_index=True)
-            df.to_csv(VISITOR_FILE, index=False)
-        except:
-            pass # 파일 충돌 등 에러 무시
+    # 기록 추가
+    df = pd.concat([pd.DataFrame([new_row]), df], ignore_index=True)
+    df.to_csv(LOGIN_LOG_FILE, index=False)
 
-def get_visitor_count():
-    if os.path.exists(VISITOR_FILE):
-        try:
-            df = pd.read_csv(VISITOR_FILE)
-            return len(df), df # 전체 수, 데이터프레임 반환
-        except: return 0, pd.DataFrame()
-    return 0, pd.DataFrame()
+def get_login_logs():
+    if os.path.exists(LOGIN_LOG_FILE):
+        return pd.read_csv(LOGIN_LOG_FILE)
+    return pd.DataFrame()
 
 # 출퇴근부 로직
 def get_csv_filename():
@@ -162,10 +153,6 @@ def save_attendance(name, action):
 # -----------------------------------------------------------------------------
 set_style()
 
-# 방문자 추적 실행 (앱이 켜질 때마다 실행되지만, 세션 체크로 중복 방지)
-track_visitor()
-total_visitors, df_visitors = get_visitor_count()
-
 if 'logged_in' not in st.session_state: st.session_state.logged_in = False
 if 'store_name' not in st.session_state: st.session_state.store_name = ""
 
@@ -182,17 +169,25 @@ if not st.session_state.logged_in:
 
         store_input = st.text_input("매장 이름 (예: 도하분식)")
         pw_input = st.text_input("비밀번호 (숫자 4자리)", type="password")
+        
         if st.button("입장하기"):
             if store_input and pw_input:
                 st.session_state.logged_in = True
                 st.session_state.store_name = store_input
+                
+                # [NEW] 로그인 성공 시 기록 남기기 (관리자 제외하고 기록할 수도 있지만, 일단 다 기록)
+                if store_input != "관리자":
+                    log_login_event(store_input)
+                
                 st.rerun()
             else: st.warning("정보를 입력해주세요.")
             
-    # [로그인 화면에도 방문자 수 표시 - 사회적 증거]
+    # 전체 누적 접속 수 표시 (사회적 증거)
+    logs = get_login_logs()
+    total_visits = len(logs)
     st.markdown(f"""
     <div style='text-align:center; color:#888; margin-top:20px;'>
-    👀 현재까지 <b>{total_visitors:,}명</b>의 사장님이 방문하셨습니다.
+    👀 현재까지 <b>{total_visits:,}번</b>의 사장님 방문이 있었습니다.
     </div>
     """, unsafe_allow_html=True)
     
@@ -202,24 +197,33 @@ if not st.session_state.logged_in:
 with st.sidebar:
     st.write(f"👤 **{st.session_state.store_name}**님")
     
-    # [NEW] 사이드바 방문자 카운터
-    st.markdown(f"""
-    <div class='visitor-badge'>
-    DOHA VISITORS<br>
-    {total_visitors:,}
-    </div>
-    """, unsafe_allow_html=True)
-
-    with st.expander("📲 앱 설치 방법"):
-        st.info("카톡 우측 하단 점 3개 → [다른 브라우저로 열기] → [홈 화면에 추가]")
+    # [핵심] 관리자 전용 기능 (매장명이 '관리자'일 때만 보임)
+    if st.session_state.store_name == "관리자":
+        st.success("🔒 관리자 모드 활성화")
         
-    # [NEW] 관리자용 접속 로그 확인 (상세)
-    with st.expander("🕵️‍♂️ 접속 로그 보기"):
-        if not df_visitors.empty:
-            # 최근 10명만 보여주기
-            st.dataframe(df_visitors.sort_values(by="timestamp", ascending=False).head(10), hide_index=True)
-        else:
-            st.write("기록 없음")
+        # 로그 불러오기
+        logs = get_login_logs()
+        total_visits = len(logs)
+        
+        st.markdown(f"""
+        <div class='visitor-badge'>
+        Total Visits<br>
+        {total_visits:,}
+        </div>
+        """, unsafe_allow_html=True)
+        
+        with st.expander("🕵️‍♂️ 실시간 접속 현황 (상세)", expanded=True):
+            if not logs.empty:
+                st.dataframe(logs, hide_index=True)
+                # 다운로드 기능
+                csv = logs.to_csv(index=False).encode('utf-8-sig')
+                st.download_button("📥 로그 다운로드", csv, "login_log.csv", "text/csv")
+            else:
+                st.write("아직 접속 기록이 없습니다.")
+    else:
+        # 일반 사용자는 설치 방법만 보임
+        with st.expander("📲 앱 설치 방법"):
+            st.info("카톡 우측 하단 점 3개 → [다른 브라우저로 열기] → [홈 화면에 추가]")
 
     if st.button("로그아웃"):
         st.session_state.logged_in = False
