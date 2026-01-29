@@ -28,26 +28,26 @@ def set_style():
         <style>
         .main { background-color: #f8f9fa; }
         h1, h2, h3 { color: #ff6f0f; font-weight: 800; } 
-        
         .finance-box { background-color: white; padding: 15px; border-radius: 10px; box-shadow: 1px 1px 3px rgba(0,0,0,0.1); text-align: center; margin-bottom: 10px; }
         .finance-title { font-size: 0.9rem; color: #666; font-weight: bold; }
-        .finance-val { font-size: 1.5rem; font-weight: bold; color: #333; }
-        .finance-change { font-size: 1rem; font-weight: bold; }
-        
+        .finance-val { font-size: 1.2rem; font-weight: bold; color: #333; }
+        .finance-change { font-size: 0.9rem; font-weight: bold; }
         .news-box { background-color: white; padding: 15px; border-radius: 10px; border-left: 5px solid #ff6f0f; margin-bottom: 20px; }
         .news-item { padding: 8px 0; border-bottom: 1px solid #eee; }
         .news-item a { text-decoration: none; color: #333; font-weight: bold; font-size: 1rem; }
-        
         .stButton>button { background-color: #ff6f0f; color: white; border-radius: 8px; font-weight: bold; width: 100%; height: 45px; border: none; }
         .stButton>button:hover { background-color: #e65c00; }
-        
         .event-box { background-color: #1e3932; color: white; padding: 20px; border-radius: 10px; text-align: center; margin-bottom: 20px; }
         .fire-info-box { background-color: #fff3cd; padding: 20px; border-radius: 10px; border: 2px solid #ffc107; text-align: center; margin-bottom: 20px; }
         .fire-emoji { font-size: 3rem; }
         .login-box { max-width: 400px; margin: 0 auto; padding: 40px; background-color: white; border-radius: 20px; text-align: center; }
-        
-        /* 설치 안내 박스 (강조) */
         .install-guide { background-color: #e3f2fd; padding: 15px; border-radius: 10px; border: 1px solid #90caf9; margin-bottom: 15px; color: #0d47a1; font-size: 0.9rem; }
+        
+        /* 방문자 카운터 스타일 */
+        .visitor-badge {
+            background-color: #333; color: #00ff00; padding: 10px; border-radius: 5px;
+            font-family: 'Courier New', monospace; text-align: center; font-weight: bold; margin-top: 20px;
+        }
         </style>
     """, unsafe_allow_html=True)
 
@@ -55,10 +55,9 @@ def set_style():
 # [기능 2] 메일 전송
 # -----------------------------------------------------------------------------
 def send_email_safe(name, phone, client_email, req_text, type_tag):
-    if "smtp" not in st.secrets: return False, "설정 오류"
+    if "smtp" not in st.secrets: return False, "설정 오류: Secrets를 확인하세요."
     sender = st.secrets["smtp"].get("email", "")
     pw = st.secrets["smtp"].get("password", "")
-    
     store = st.session_state.get('store_name', '미로그인')
     subject = f"☕ [스타벅스/DOHA] {name}님 {type_tag} ({store})"
     body = f"매장: {store}\n이름: {name}\n연락처: {phone}\n이메일: {client_email}\n요청: {req_text}"
@@ -66,41 +65,43 @@ def send_email_safe(name, phone, client_email, req_text, type_tag):
     msg['Subject'] = subject
     msg['From'] = sender
     msg['To'] = sender 
-
     try:
-        with smtplib.SMTP('smtp.gmail.com', 587, timeout=5) as server:
+        with smtplib.SMTP('smtp.gmail.com', 587, timeout=10) as server:
             server.starttls()
             server.login(sender, pw)
             server.sendmail(sender, sender, msg.as_string())
         return True, "성공"
-    except Exception as e: return False, str(e)
+    except Exception as e: return False, f"전송 실패: {str(e)}"
 
 # -----------------------------------------------------------------------------
-# [기능 3] 데이터 엔진
+# [기능 3] 데이터 엔진 & 방문자 추적
 # -----------------------------------------------------------------------------
-@st.cache_data(ttl=600)
+@st.cache_data(ttl=1800)
 def get_finance_data():
     try:
         tickers = {'KOSPI': '^KS11', 'NASDAQ': '^IXIC', 'USD/KRW': 'KRW=X'}
         data = {}
         for name, symbol in tickers.items():
-            ticker = yf.Ticker(symbol)
-            hist = ticker.history(period="2d")
-            if len(hist) >= 1:
-                current = hist['Close'].iloc[-1]
-                prev = hist['Close'].iloc[-2] if len(hist) > 1 else current
-                change = current - prev
-                change_pct = (change / prev) * 100
-                data[name] = {"price": current, "change": change, "pct": change_pct}
+            try:
+                ticker = yf.Ticker(symbol)
+                hist = ticker.history(period="2d", timeout=10)
+                if len(hist) >= 1:
+                    current = hist['Close'].iloc[-1]
+                    prev = hist['Close'].iloc[-2] if len(hist) > 1 else current
+                    change = current - prev
+                    change_pct = (change / prev) * 100
+                    data[name] = {"price": current, "change": change, "pct": change_pct}
+            except: continue
         return data
     except: return {}
 
 def get_real_google_news():
-    keywords = ["소상공인", "자영업", "지원금", "정책", "세금", "대출금리", "최저임금", "소비트렌드", "창업", "폐업"]
+    keywords = ["소상공인", "자영업", "지원금", "정책", "세금", "대출금리", "최저임금", "창업", "폐업"]
     query = "+OR+".join(keywords)
     url = f"https://news.google.com/rss/search?q={query}&hl=ko&gl=KR&ceid=KR:ko"
     try:
         feed = feedparser.parse(url)
+        if feed.bozo and feed.bozo_exception: return []
         return feed.entries[:10]
     except: return []
 
@@ -109,6 +110,39 @@ def get_today_fortune():
     random.seed(datetime.now().day)
     return random.choice(fortunes)
 
+# --- [NEW] 방문자 추적 로직 ---
+VISITOR_FILE = "visitor_log.csv"
+
+def track_visitor():
+    # 1. 파일이 없으면 생성
+    if not os.path.exists(VISITOR_FILE):
+        df = pd.DataFrame(columns=["timestamp", "date"])
+        df.to_csv(VISITOR_FILE, index=False)
+    
+    # 2. 세션 상태를 확인하여 '이미 카운트된 방문자'인지 확인
+    if 'visitor_counted' not in st.session_state:
+        st.session_state.visitor_counted = True
+        
+        # 3. 새로운 방문자라면 기록 추가
+        now = datetime.now()
+        new_row = {"timestamp": now.strftime("%Y-%m-%d %H:%M:%S"), "date": now.strftime("%Y-%m-%d")}
+        
+        try:
+            df = pd.read_csv(VISITOR_FILE)
+            df = pd.concat([pd.DataFrame([new_row]), df], ignore_index=True)
+            df.to_csv(VISITOR_FILE, index=False)
+        except:
+            pass # 파일 충돌 등 에러 무시
+
+def get_visitor_count():
+    if os.path.exists(VISITOR_FILE):
+        try:
+            df = pd.read_csv(VISITOR_FILE)
+            return len(df), df # 전체 수, 데이터프레임 반환
+        except: return 0, pd.DataFrame()
+    return 0, pd.DataFrame()
+
+# 출퇴근부 로직
 def get_csv_filename():
     safe_name = "".join([c for c in st.session_state.store_name if c.isalnum()])
     return f"log_{safe_name}.csv"
@@ -128,6 +162,10 @@ def save_attendance(name, action):
 # -----------------------------------------------------------------------------
 set_style()
 
+# 방문자 추적 실행 (앱이 켜질 때마다 실행되지만, 세션 체크로 중복 방지)
+track_visitor()
+total_visitors, df_visitors = get_visitor_count()
+
 if 'logged_in' not in st.session_state: st.session_state.logged_in = False
 if 'store_name' not in st.session_state: st.session_state.store_name = ""
 
@@ -139,19 +177,8 @@ if not st.session_state.logged_in:
         st.markdown("<div class='login-box'><h1>🥕 DOHA 사장님 비서</h1><p>로그인 (키오스크 방식)</p></div>", unsafe_allow_html=True)
         st.markdown("<br>", unsafe_allow_html=True)
         
-        # [📲 핵심 수정] 카카오톡 전용 설치 안내
-        with st.expander("📲 카톡에서 들어오셨나요? (앱 설치법)"):
-            st.markdown("""
-            **카톡 안에서는 설치가 안 됩니다! 아래 순서대로 해주세요.**
-            
-            **1. 오른쪽 하단(또는 상단) 점 3개(⋯) 클릭**
-            **2. [다른 브라우저로 열기] 클릭** (삼성인터넷, Chrome, Safari 등)
-            **3. 그 다음 아래처럼 하시면 됩니다.**
-            
-            ---
-            * **갤럭시:** 우측 상단 점 3개(⋮) → **'홈 화면에 추가'**
-            * **아이폰:** 하단 공유 버튼(📤) → **'홈 화면에 추가'**
-            """)
+        with st.expander("📲 카톡에서 들어오셨나요? (설치법)"):
+            st.markdown("**우측 하단 점 3개 → [다른 브라우저로 열기] → [홈 화면에 추가]**")
 
         store_input = st.text_input("매장 이름 (예: 도하분식)")
         pw_input = st.text_input("비밀번호 (숫자 4자리)", type="password")
@@ -161,13 +188,39 @@ if not st.session_state.logged_in:
                 st.session_state.store_name = store_input
                 st.rerun()
             else: st.warning("정보를 입력해주세요.")
+            
+    # [로그인 화면에도 방문자 수 표시 - 사회적 증거]
+    st.markdown(f"""
+    <div style='text-align:center; color:#888; margin-top:20px;'>
+    👀 현재까지 <b>{total_visitors:,}명</b>의 사장님이 방문하셨습니다.
+    </div>
+    """, unsafe_allow_html=True)
+    
     st.stop()
 
 # 메인 화면
 with st.sidebar:
     st.write(f"👤 **{st.session_state.store_name}**님")
+    
+    # [NEW] 사이드바 방문자 카운터
+    st.markdown(f"""
+    <div class='visitor-badge'>
+    DOHA VISITORS<br>
+    {total_visitors:,}
+    </div>
+    """, unsafe_allow_html=True)
+
     with st.expander("📲 앱 설치 방법"):
-        st.info("카톡 화면 우측 하단 점 3개 클릭 -> [다른 브라우저로 열기] 후 -> [홈 화면에 추가] 하세요.")
+        st.info("카톡 우측 하단 점 3개 → [다른 브라우저로 열기] → [홈 화면에 추가]")
+        
+    # [NEW] 관리자용 접속 로그 확인 (상세)
+    with st.expander("🕵️‍♂️ 접속 로그 보기"):
+        if not df_visitors.empty:
+            # 최근 10명만 보여주기
+            st.dataframe(df_visitors.sort_values(by="timestamp", ascending=False).head(10), hide_index=True)
+        else:
+            st.write("기록 없음")
+
     if st.button("로그아웃"):
         st.session_state.logged_in = False
         st.rerun()
@@ -209,7 +262,7 @@ with tab1:
                 color = "red" if data['change'] > 0 else "blue"
                 sign = "▲" if data['change'] > 0 else "▼"
                 st.markdown(f"<div class='finance-box'><div class='finance-title'>{name}</div><div class='finance-val'>{data['price']:,.2f}</div><div class='finance-change' style='color:{color};'>{sign} {abs(data['change']):.2f} ({data['pct']:.2f}%)</div></div>", unsafe_allow_html=True)
-        else: st.info("데이터 로딩 중...")
+        else: st.info("금융 정보 로딩 중...")
 
     with col_right:
         st.subheader("🧮 오늘의 목표 매출")
