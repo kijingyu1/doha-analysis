@@ -4,3 +4,5 @@ numpy
 requests
 geopy
 feedparser
+beautifulsoup4
+lxml
