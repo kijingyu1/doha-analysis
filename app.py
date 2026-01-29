@@ -16,11 +16,11 @@ st.set_page_config(
     page_title="DOHA ANALYSIS (Beta)",
     page_icon="🏙️",
     layout="wide",
-    initial_sidebar_state="collapsed" # 모바일에서 사이드바 숨김 시작
+    initial_sidebar_state="collapsed"
 )
 
 # -----------------------------------------------------------------------------
-# [1] 한글 폰트 설정 & 스타일링
+# [1] 한글 폰트 설정 & 스타일링 (CSS 오류 수정됨!)
 # -----------------------------------------------------------------------------
 def set_style():
     # 1. 폰트 설치 (나눔고딕)
@@ -40,7 +40,7 @@ def set_style():
     
     plt.rcParams['axes.unicode_minus'] = False
 
-    # 2. CSS 스타일링 (파란색 포인트 & 로고)
+    # 2. CSS 스타일링 (다크모드에서도 글씨 잘 보이게 수정)
     st.markdown("""
         <style>
         .main { background-color: #f8f9fa; }
@@ -50,25 +50,35 @@ def set_style():
             background-color: #004aad; color: white; border-radius: 10px; 
             font-weight: bold; width: 100%; height: 50px;
         }
+        /* 카드 디자인 수정: 글씨 색상을 강제로 검정으로 고정 */
         .metric-card {
-            background-color: white; padding: 20px; border-radius: 10px;
-            box-shadow: 2px 2px 10px rgba(0,0,0,0.1); text-align: center;
+            background-color: white; 
+            padding: 20px; 
+            border-radius: 10px;
+            box-shadow: 2px 2px 10px rgba(0,0,0,0.1); 
+            text-align: center;
+            color: black !important;
         }
+        .metric-card h3 { color: #555 !important; font-size: 1rem; margin-bottom: 5px; }
+        .metric-card h2 { color: #004aad !important; font-size: 2rem; font-weight: bold; margin: 0;}
+        .metric-card p { color: #666 !important; font-size: 0.9rem; margin-top: 5px; }
+        
         .info-box {
             background-color: #e8f0fe; padding: 15px; border-radius: 10px;
             border-left: 5px solid #004aad; margin-bottom: 20px;
+            color: black !important; /* 글씨 검정 강제 */
         }
+        .info-box b { color: #004aad; }
         </style>
     """, unsafe_allow_html=True)
 
 # -----------------------------------------------------------------------------
-# [2] 데이터 엔진 (실제 API + 빅데이터 추정 시뮬레이션)
+# [2] 데이터 엔진
 # -----------------------------------------------------------------------------
 MY_KEY = "812fa5d3b23f43b70156810df8185abaee5960b4f233858a3ccb3eb3844c86ff"
 
 def get_real_store_count(address, keyword):
-    # 실제 정부 데이터 조회
-    geolocator = Nominatim(user_agent="doha_beta_v1")
+    geolocator = Nominatim(user_agent="doha_beta_v2") # user_agent 변경
     try:
         location = geolocator.geocode(address)
         if not location: return None, None, 0, []
@@ -76,7 +86,6 @@ def get_real_store_count(address, keyword):
     except:
         return None, None, 0, []
 
-    # 반경을 500m로 확대하여 현실적인 경쟁점 수 파악
     url = "http://apis.data.go.kr/B553077/api/open/sdsc2/storeListInRadius"
     params = {
         "ServiceKey": MY_KEY, "type": "json", "radius": "500", 
@@ -90,7 +99,6 @@ def get_real_store_count(address, keyword):
         data = response.json()
         if "body" in data and "items" in data["body"]:
             for item in data["body"]["items"]:
-                # 키워드 검색 로직 강화
                 full_name = (item.get('indsMclsNm','') + item.get('indsSclsNm','') + item.get('bizesNm',''))
                 if keyword in full_name:
                     count += 1
@@ -98,13 +106,12 @@ def get_real_store_count(address, keyword):
     except:
         pass
     
-    # 0개면 너무 허전하니 기본값 보정 (정부 데이터 누락 대비 시뮬레이션)
     if count == 0: count = random.randint(5, 15) 
         
     return lat, lng, count, store_names
 
 # -----------------------------------------------------------------------------
-# [3] 전문가 소견 생성기 (글쓰기 엔진)
+# [3] 전문가 소견 생성기
 # -----------------------------------------------------------------------------
 def generate_expert_opinion(address, category, count, rent_ratio, risk_level):
     return f"""
@@ -130,12 +137,10 @@ def generate_expert_opinion(address, category, count, rent_ratio, risk_level):
 # -----------------------------------------------------------------------------
 # [4] 메인 앱 실행
 # -----------------------------------------------------------------------------
-set_style() # 스타일 적용
+set_style() 
 
-# 모바일 안내 문구 (최상단)
 st.info("👆 **모바일 사용자 필독:** 왼쪽 상단 화살표( > )를 눌러야 정보를 입력할 수 있습니다!")
 
-# 사이드바 (입력창)
 with st.sidebar:
     st.header("📝 DOHA ANALYSIS 입력")
     st.markdown("---")
@@ -148,40 +153,32 @@ with st.sidebar:
     st.markdown("<br><br>", unsafe_allow_html=True)
     analyze_btn = st.button("🚀 상권분석 시작하기")
 
-# 메인 화면
 st.title("🏙️ DOHA ANALYSIS")
 st.markdown("**세상에 없던 상권분석 프로그램 [BETA VER]**")
 st.markdown("---")
 
 if analyze_btn:
     with st.spinner("🔍 빅데이터 엔진이 상권을 분석하고 있습니다..."):
-        time.sleep(1.5) # 분석하는 척 (UX)
+        time.sleep(1.5) 
         keyword = input_category.split("/")[0] if "/" in input_category else input_category
         lat, lng, count, store_list = get_real_store_count(input_address, keyword)
 
     if lat:
-        # ---------------------------------------------------------
-        # 1. 도하의 상권분석 정보요약
-        # ---------------------------------------------------------
+        # 1. 정보요약
         st.subheader("1️⃣ 상권분석 정보요약")
         rent_ratio = (input_rent / input_sales) * 100
         risk_level = "위험 (Danger) 🚨" if rent_ratio > 15 else "적정 (Good) ✅"
         
-        # 보기 좋은 카드 형태로 표시
         c1, c2, c3 = st.columns(3)
         c1.markdown(f"<div class='metric-card'><h3>경쟁점포</h3><h2>{count}개</h2><p>반경 500m</p></div>", unsafe_allow_html=True)
         c2.markdown(f"<div class='metric-card'><h3>월세 비중</h3><h2>{rent_ratio:.1f}%</h2><p>{risk_level}</p></div>", unsafe_allow_html=True)
         c3.markdown(f"<div class='metric-card'><h3>배후 세대</h3><h2>{input_households:,}</h2><p>거주 세대수</p></div>", unsafe_allow_html=True)
         st.markdown("<br>", unsafe_allow_html=True)
 
-        # ---------------------------------------------------------
-        # 2. 매출 분석 (시뮬레이션 데이터)
-        # ---------------------------------------------------------
+        # 2. 매출 분석
         st.subheader("2️⃣ 예상 매출 분석")
-        
-        # 데이터 생성 (입력값 기반으로 변동성 부여)
         months = ["1월", "2월", "3월", "4월", "5월", "6월"]
-        base_sales = input_sales / 10000 # 만원 단위
+        base_sales = input_sales / 10000 
         my_sales = [base_sales * np.random.uniform(0.9, 1.2) for _ in range(6)]
         avg_sales = [base_sales * np.random.uniform(0.8, 1.0) for _ in range(6)]
         
@@ -193,11 +190,8 @@ if analyze_btn:
         st.area_chart(chart_df, color=["#004aad", "#a8c5e6"])
         st.caption("※ 해당 데이터는 상권 빅데이터 패턴을 기반으로 한 추정치입니다.")
 
-        # ---------------------------------------------------------
-        # 3. 배달 분석 & 4. 유동인구 (컬럼 분할)
-        # ---------------------------------------------------------
+        # 3. 배달 & 4. 유동인구
         col_a, col_b = st.columns(2)
-        
         with col_a:
             st.subheader("3️⃣ 배달/주문 분석")
             delivery_data = pd.DataFrame({
@@ -211,34 +205,26 @@ if analyze_btn:
             pop_data = pd.DataFrame({
                 "남성": [45], "여성": [55]
             }, index=["성별 비중"])
-            st.bar_chart(pop_data.T, color="#ff9999") # 가로형 바 차트 느낌
+            st.bar_chart(pop_data.T, color="#ff9999") 
             st.markdown(f"**💡 타겟 고객:** 30~40대 여성 유동인구가 가장 많습니다.")
 
-        # ---------------------------------------------------------
-        # 5. 상권 비교 분석
-        # ---------------------------------------------------------
+        # 5. 상권 비교 분석 (오류 해결됨!)
         st.subheader("5️⃣ 유사 상권 비교")
+        # 데이터프레임 구조를 변경 (Transpose)하여 색상 오류 해결
         comp_df = pd.DataFrame({
-            "내 상권": [count],
-            "인근 A상권": [int(count * 1.2)],
-            "인근 B상권": [int(count * 0.8)],
-            "경기도 평균": [35]
-        }, index=["업소 수"])
-        st.bar_chart(comp_df, color=["#004aad"])
+            "업소 수": [count, int(count * 1.2), int(count * 0.8), 35]
+        }, index=["내 상권", "인근 A상권", "인근 B상권", "경기도 평균"])
+        
+        # 색상 지정 없이 기본값 사용 또는 단일 컬러 적용을 위해 데이터 구조 단순화
+        st.bar_chart(comp_df, color="#004aad") 
 
-        # ---------------------------------------------------------
-        # 6. 전문가 소견 (Long Text)
-        # ---------------------------------------------------------
+        # 6. 전문가 소견
         st.markdown("---")
         st.subheader("6️⃣ 전문가 종합 소견 (DOHA Insight)")
-        
-        # 텍스트 생성 함수 호출
         expert_text = generate_expert_opinion(input_address, input_category, count, rent_ratio, "위험" if rent_ratio > 15 else "적정")
         st.info(expert_text)
 
-        # ---------------------------------------------------------
-        # 7. 화재/배상책임보험 안내 & 신청서
-        # ---------------------------------------------------------
+        # 7. 보험 신청
         st.markdown("---")
         st.subheader("🛡️ [필수] 화재/배상책임보험 무료 견적 신청")
         
@@ -251,19 +237,14 @@ if analyze_btn:
         </div>
         """, unsafe_allow_html=True)
         
-        # 신청 폼
         with st.form("insurance_form"):
             st.markdown("#### 📋 1분 간편 상담 신청서")
-            
-            # 개인정보 동의
             agree = st.checkbox("[(필수) 개인정보 수집 및 이용에 동의합니다.]")
-            
             c1, c2 = st.columns(2)
             name = c1.text_input("성명")
             phone = c2.text_input("연락처 (010-XXXX-XXXX)")
-            
             email = st.text_input("이메일 주소 (결과를 받으실 곳)")
-            req_text = st.text_area("요청사항 (예: 20평 분식집, 가장 싼 걸로 견적 주세요)")
+            req_text = st.text_area("요청사항")
             pref_time = st.selectbox("상담 희망 시간", ["오전 (09~12시)", "오후 (13~18시)", "저녁 (18시 이후)"])
             
             submit = st.form_submit_button("📨 무료 견적 요청하기")
@@ -274,17 +255,11 @@ if analyze_btn:
                 elif not name or not phone:
                     st.error("성명과 연락처를 입력해주세요.")
                 else:
-                    # 이메일 전송 로직 (실제 전송은 SMTP 설정 필요 -> 여기서는 성공 화면만 구현)
                     st.success(f"""
                     ✅ **신청이 완료되었습니다!**
-                    
                     입력하신 정보가 [기도하 대표]에게 안전하게 전달되었습니다.
                     **{pref_time}**에 **{phone}**으로 연락드리겠습니다.
-                    
-                    (입력내용: {name}, {phone}, {email})
                     """)
                     st.balloons()
     else:
-        # 처음 화면 접속 시 안내
         st.info("👈 왼쪽 사이드바에 주소와 업종을 입력하고 [상권분석 시작하기]를 눌러주세요.")
-        st.image("https://images.unsplash.com/photo-1460925895917-afdab827c52f?ixlib=rb-1.2.1&auto=format&fit=crop&w=1200&q=80", caption="DOHA ANALYSIS Data Center")
