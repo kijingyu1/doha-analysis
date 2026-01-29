@@ -27,7 +27,12 @@ def set_style():
     st.markdown("""
         <style>
         .main { background-color: #f8f9fa; }
-        h1, h2, h3 { color: #ff6f0f; font-weight: 800; } 
+        
+        /* 타이틀 스타일 커스텀 */
+        h1 { color: #ff6f0f; font-weight: 800; line-height: 1.2; }
+        .store-subtitle { color: #333; font-size: 1.5rem; font-weight: bold; margin-top: 5px; }
+        
+        h2, h3 { color: #ff6f0f; font-weight: 800; } 
         
         .finance-box { background-color: white; padding: 10px; border-radius: 10px; box-shadow: 1px 1px 3px rgba(0,0,0,0.1); text-align: center; margin-bottom: 8px; }
         .finance-title { font-size: 0.8rem; color: #666; font-weight: bold; }
@@ -111,7 +116,6 @@ def get_real_google_news():
     except: return []
 
 def get_today_affirmation():
-    # 긍정의 말 (운세 대체)
     words = [
         "사장님, 오늘도 좋은 일이 생길 거예요!",
         "오늘 흘린 땀방울이 내일의 매출이 됩니다.",
@@ -184,12 +188,18 @@ total_visitors, df_visitors = get_visitor_count()
 if 'logged_in' not in st.session_state: st.session_state.logged_in = False
 if 'store_name' not in st.session_state: st.session_state.store_name = ""
 
-# 로그인
+# 로그인 화면 (타이틀 줄바꿈 적용)
 if not st.session_state.logged_in:
     st.markdown("<br><br>", unsafe_allow_html=True)
     c1, c2, c3 = st.columns([1, 2, 1])
     with c2:
-        st.markdown("<div class='login-box'><h1>🥕 사장님 비서</h1><p>로그인 (키오스크 방식)</p></div>", unsafe_allow_html=True)
+        st.markdown("""
+        <div class='login-box'>
+            <h1>🥕 사장님<br>비서</h1>
+            <p>로그인 (키오스크 방식)</p>
+        </div>
+        """, unsafe_allow_html=True)
+        
         with st.expander("📲 카톡에서 들어오셨나요? (설치법)"):
             st.markdown("**우측 하단 점 3개 → [다른 브라우저로 열기] → [홈 화면에 추가]**")
         store_input = st.text_input("매장 이름")
@@ -203,7 +213,7 @@ if not st.session_state.logged_in:
     st.markdown(f"<div style='text-align:center; color:#888; margin-top:20px;'>👀 현재 <b>{total_visitors:,}명</b>의 사장님이 함께하고 계십니다.</div>", unsafe_allow_html=True)
     st.stop()
 
-# 메인
+# 메인 화면
 with st.sidebar:
     st.write(f"👤 **{st.session_state.store_name}**님")
     st.markdown(f"<div class='visitor-badge'>VISITORS<br>{total_visitors:,}</div>", unsafe_allow_html=True)
@@ -211,8 +221,14 @@ with st.sidebar:
         st.session_state.logged_in = False
         st.rerun()
 
-# [수정] 타이틀 글씨 크기 조정 및 DOHA 삭제
-st.title(f"🥕 사장님 비서 ({st.session_state.store_name})")
+# [수정] 메인 타이틀 (가게 이름을 다음 줄로 내림)
+st.markdown(f"""
+<h1>
+    🥕 사장님 비서<br>
+    <span class='store-subtitle'>({st.session_state.store_name})</span>
+</h1>
+""", unsafe_allow_html=True)
+
 st.markdown("""<div class='install-guide'><b>💡 꿀팁:</b> 카톡 말고 <b>[다른 브라우저로 열기]</b> 후 <b>[홈 화면에 추가]</b> 하세요!</div>""", unsafe_allow_html=True)
 
 tab1, tab2, tab3, tab4, tab5 = st.tabs(["🏠 데일리 홈", "🔍 전국 당근검색", "⏰ 직원 출퇴근", "🔥 화재보험 점검", "📻 우리들의 방송국"])
@@ -225,7 +241,6 @@ with tab1:
         with st.container():
             st.markdown("<div class='news-box'>", unsafe_allow_html=True)
             for news in news_list:
-                # [수정] 괄호 삭제하고 날짜만 표시
                 date_str = f"{news.published_parsed.tm_mon}/{news.published_parsed.tm_mday}"
                 st.markdown(f"<div class='news-item'><span style='color:#ff6f0f;'>●</span> <a href='{news.link}' target='_blank'>{news.title}</a> <span class='news-date'>{date_str}</span></div>", unsafe_allow_html=True)
             st.markdown("</div>", unsafe_allow_html=True)
@@ -233,25 +248,20 @@ with tab1:
     st.markdown("---")
     col_left, col_right = st.columns(2)
     
-    # [왼쪽] 긍정의 말 + 금융
     with col_left:
-        # [수정] 운세 -> 긍정의 말
         st.subheader("🍀 긍정의 말 (Daily Affirmation)")
         st.success(get_today_affirmation())
         
         st.markdown("<br>", unsafe_allow_html=True)
-        # [수정] 코스피 등 금융 지표 복구
         st.subheader("📉 주요 경제 지표")
         finance = get_finance_data()
         
-        # 금융 데이터가 로딩 중이거나 실패해도 UI가 꺼지지 않도록 처리
         if finance:
             for name, data in finance.items():
                 color = "red" if data['change'] > 0 else "blue"
                 sign = "▲" if data['change'] > 0 else "▼"
                 st.markdown(f"<div class='finance-box'><div class='finance-title'>{name}</div><div class='finance-val'>{data['price']:,.2f}</div><div class='finance-change' style='color:{color};'>{sign} {abs(data['change']):.2f} ({data['pct']:.2f}%)</div></div>", unsafe_allow_html=True)
         else:
-            # 데이터 로딩 실패 시 보여줄 정적 UI (빈칸 방지)
             st.info("금융 정보를 불러오는 중입니다... (잠시 후 다시 시도)")
 
     with col_right:
@@ -269,7 +279,6 @@ with tab1:
 
 # [TAB 2] 당근 검색
 with tab2:
-    # [수정] 글씨 크기 작게 (h3)
     st.markdown("### 🔍 당근마켓 전국 매물 찾기")
     keyword = st.text_input("찾으시는 물건", "")
     if st.button("전국 검색 시작"):
@@ -295,7 +304,6 @@ with tab3:
 
 # [TAB 4] 화재보험
 with tab4:
-    # [수정] 스타벅스 글씨 크기 작게 (h3)
     st.markdown("""<div class='event-box'><h3>☕ 스타벅스 100% 증정</h3><b>"상담만 받아도 조건 없이 드립니다!"</b></div>""", unsafe_allow_html=True)
     st.header("🔥 우리 가게 안전 점검")
     c1, c2, c3 = st.columns(3)
