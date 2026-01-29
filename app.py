@@ -44,14 +44,13 @@ def set_style():
         .install-guide { background-color: #e3f2fd; padding: 15px; border-radius: 10px; border: 1px solid #90caf9; margin-bottom: 15px; color: #0d47a1; font-size: 0.9rem; }
         .visitor-badge { background-color: #333; color: #00ff00; padding: 10px; border-radius: 5px; font-family: 'Courier New', monospace; text-align: center; font-weight: bold; margin-top: 20px; }
         
-        /* 커뮤니티 스타일 */
-        .chat-row { padding: 10px; border-bottom: 1px solid #eee; background-color: white; margin-bottom: 5px; border-radius: 5px; }
-        .chat-user { font-weight: bold; color: #ff6f0f; font-size: 0.9rem; }
-        .chat-time { font-size: 0.7rem; color: #999; float: right; }
-        .chat-msg { margin-top: 5px; color: #333; }
-        
-        /* 공지사항 스타일 */
-        .notice-bar { background-color: #fff3cd; color: #856404; padding: 15px; border-radius: 5px; margin-bottom: 20px; border: 1px solid #ffeeba; }
+        /* 📻 방송국 스타일 */
+        .dj-card {
+            background-color: #2b2b2b; color: white; padding: 15px; border-radius: 10px;
+            border-left: 5px solid #00ff00; margin-bottom: 10px;
+        }
+        .dj-name { color: #00ff00; font-weight: bold; font-size: 1.1rem; }
+        .dj-comment { color: #ddd; font-size: 0.9rem; margin-top: 5px; }
         </style>
     """, unsafe_allow_html=True)
 
@@ -59,12 +58,12 @@ def set_style():
 # [기능 2] 메일 전송
 # -----------------------------------------------------------------------------
 def send_email_safe(name, phone, client_email, req_text, type_tag):
-    if "smtp" not in st.secrets: return False, "설정 오류: Secrets를 확인하세요."
+    if "smtp" not in st.secrets: return False, "설정 오류"
     sender = st.secrets["smtp"].get("email", "")
     pw = st.secrets["smtp"].get("password", "")
     store = st.session_state.get('store_name', '미로그인')
-    subject = f"☕ [스타벅스/DOHA] {name}님 {type_tag} ({store})"
-    body = f"매장: {store}\n이름: {name}\n연락처: {phone}\n이메일: {client_email}\n요청: {req_text}"
+    subject = f"📻 [DOHA 라디오] {name}님 {type_tag} ({store})"
+    body = f"매장: {store}\n이름: {name}\n연락처: {phone}\n내용: {req_text}"
     msg = MIMEText(body)
     msg['Subject'] = subject
     msg['From'] = sender
@@ -75,54 +74,11 @@ def send_email_safe(name, phone, client_email, req_text, type_tag):
             server.login(sender, pw)
             server.sendmail(sender, sender, msg.as_string())
         return True, "성공"
-    except Exception as e: return False, f"전송 실패: {str(e)}"
+    except Exception as e: return False, str(e)
 
 # -----------------------------------------------------------------------------
-# [기능 3] 데이터 관리 (공지, 커뮤니티, 로그)
+# [기능 3] 데이터 엔진 & DJ 스테이션 로직
 # -----------------------------------------------------------------------------
-NOTICE_FILE = "notice.csv"
-COMMUNITY_FILE = "community.csv"
-LOGIN_LOG_FILE = "login_log_v2.csv"
-
-# 1. 공지사항
-def get_notice():
-    if os.path.exists(NOTICE_FILE):
-        try:
-            df = pd.read_csv(NOTICE_FILE)
-            if not df.empty: return df.iloc[-1]['message'] # 가장 최근 공지
-        except: pass
-    return "👋 환영합니다! 사장님들의 성공 비서 DOHA입니다."
-
-def set_notice(msg):
-    df = pd.DataFrame([{"timestamp": datetime.now(), "message": msg}])
-    df.to_csv(NOTICE_FILE, index=False)
-
-# 2. 커뮤니티
-def save_post(user, msg):
-    new_row = {"timestamp": datetime.now().strftime("%m/%d %H:%M"), "user": user, "message": msg}
-    if os.path.exists(COMMUNITY_FILE): df = pd.read_csv(COMMUNITY_FILE)
-    else: df = pd.DataFrame(columns=["timestamp", "user", "message"])
-    df = pd.concat([pd.DataFrame([new_row]), df], ignore_index=True)
-    df.to_csv(COMMUNITY_FILE, index=False)
-
-def get_posts():
-    if os.path.exists(COMMUNITY_FILE): return pd.read_csv(COMMUNITY_FILE)
-    return pd.DataFrame()
-
-# 3. 로그인 로그
-def log_login_event(store_name):
-    now = datetime.now()
-    new_row = {"timestamp": now.strftime("%Y-%m-%d %H:%M:%S"), "store": store_name}
-    if os.path.exists(LOGIN_LOG_FILE): df = pd.read_csv(LOGIN_LOG_FILE)
-    else: df = pd.DataFrame(columns=["timestamp", "store"])
-    df = pd.concat([pd.DataFrame([new_row]), df], ignore_index=True)
-    df.to_csv(LOGIN_LOG_FILE, index=False)
-
-def get_login_logs():
-    if os.path.exists(LOGIN_LOG_FILE): return pd.read_csv(LOGIN_LOG_FILE)
-    return pd.DataFrame()
-
-# 4. 외부 데이터 (금융, 뉴스)
 @st.cache_data(ttl=1800)
 def get_finance_data():
     try:
@@ -153,30 +109,50 @@ def get_real_google_news():
     except: return []
 
 def get_today_fortune():
-    fortunes = ["귀인을 만날 운세입니다!", "금전운 최고! 재고 확인하세요.", "지출 관리 꼼꼼히 하세요.", "아이디어가 떠오르는 날!", "건강이 최고입니다."]
+    fortunes = ["귀인 만날 운세!", "금전운 최고!", "지출 조심!", "아이디어 폭발!", "건강 챙기세요!"]
     random.seed(datetime.now().day)
     return random.choice(fortunes)
 
-# 5. AI 문구 생성
-def generate_copy(menu, vibe):
-    templates = {
-        "감성": [
-            f"비 오는 날, {menu} 어떠세요? 마음까지 따뜻해집니다.",
-            f"고생한 나에게 주는 선물, {menu} 한 입의 행복.",
-            f"{menu}의 계절이 왔습니다. 소중한 사람과 함께하세요."
-        ],
-        "유머": [
-            f"사장님이 미쳤어요! {menu}에 영혼을 갈아 넣었습니다.",
-            f"집 나간 며느리도 돌아온다는 {menu}, 사실 제가 먹으려다 팝니다.",
-            f"다이어트는 내일부터, {menu}는 오늘부터!"
-        ],
-        "강조": [
-            f"🚨 긴급! {menu} 품절 임박! 지금 아니면 못 먹습니다.",
-            f"동네 1등 {menu}! 직접 드셔보시고 판단하세요.",
-            f"재료를 아끼면 망한다! {menu}에 진심인 사장이 만듭니다."
-        ]
-    }
-    return random.choice(templates[vibe])
+VISITOR_FILE = "visitor_log.csv"
+def track_visitor():
+    if not os.path.exists(VISITOR_FILE):
+        df = pd.DataFrame(columns=["timestamp", "date"])
+        df.to_csv(VISITOR_FILE, index=False)
+    if 'visitor_counted' not in st.session_state:
+        st.session_state.visitor_counted = True
+        now = datetime.now()
+        new_row = {"timestamp": now.strftime("%Y-%m-%d %H:%M:%S"), "date": now.strftime("%Y-%m-%d")}
+        try:
+            df = pd.read_csv(VISITOR_FILE)
+            df = pd.concat([pd.DataFrame([new_row]), df], ignore_index=True)
+            df.to_csv(VISITOR_FILE, index=False)
+        except: pass
+def get_visitor_count():
+    if os.path.exists(VISITOR_FILE):
+        try:
+            df = pd.read_csv(VISITOR_FILE)
+            return len(df), df
+        except: return 0, pd.DataFrame()
+    return 0, pd.DataFrame()
+
+# [NEW] 방송국(DJ) 데이터 관리
+STATION_FILE = "station_list.csv"
+def load_stations():
+    if os.path.exists(STATION_FILE): return pd.read_csv(STATION_FILE)
+    # 초기 데이터 (샘플)
+    return pd.DataFrame({
+        "store_name": ["DOHA 공식 방송", "퇴근길 호프집"],
+        "url": ["https://www.youtube.com/watch?v=TesYp2sO1IA", "https://www.youtube.com/watch?v=1b-3zbwgq1g"],
+        "comment": ["활기찬 하루를 위한 트로트 믹스입니다!", "오늘 하루도 고생하셨습니다. 발라드 듣고 가세요."]
+    })
+
+def save_station(url, comment):
+    df = load_stations()
+    new_row = {"store_name": st.session_state.store_name, "url": url, "comment": comment}
+    # 최신순으로 위로 오게 저장
+    df = pd.concat([pd.DataFrame([new_row]), df], ignore_index=True)
+    df.to_csv(STATION_FILE, index=False)
+    return df
 
 # 출퇴근부
 def get_csv_filename():
@@ -197,6 +173,8 @@ def save_attendance(name, action):
 # [메인] 앱 실행
 # -----------------------------------------------------------------------------
 set_style()
+track_visitor()
+total_visitors, df_visitors = get_visitor_count()
 
 if 'logged_in' not in st.session_state: st.session_state.logged_in = False
 if 'store_name' not in st.session_state: st.session_state.store_name = ""
@@ -207,65 +185,33 @@ if not st.session_state.logged_in:
     c1, c2, c3 = st.columns([1, 2, 1])
     with c2:
         st.markdown("<div class='login-box'><h1>🥕 DOHA 사장님 비서</h1><p>로그인 (키오스크 방식)</p></div>", unsafe_allow_html=True)
-        st.markdown("<br>", unsafe_allow_html=True)
-        
-        # [안내 문구 강화] - 여기가 핵심입니다!
-        st.warning("📢 **꼭 읽어주세요!**\n\n다음에 다시 오실 때 **똑같은 [매장 이름]과 [비밀번호]**를 입력하셔야 기존 기록(출퇴근부 등)을 이어서 볼 수 있습니다.\n\n(잊어버리면 기록을 찾을 수 없어요! 꼭 기억하기 쉬운 걸로 설정하세요.)")
-
         with st.expander("📲 카톡에서 들어오셨나요? (설치법)"):
             st.markdown("**우측 하단 점 3개 → [다른 브라우저로 열기] → [홈 화면에 추가]**")
-            
-        store_input = st.text_input("매장 이름 (예: 도하분식)", placeholder="기억하기 쉬운 이름을 쓰세요")
-        pw_input = st.text_input("비밀번호 (숫자 4자리)", type="password")
-        
+        store_input = st.text_input("매장 이름")
+        pw_input = st.text_input("비밀번호 (4자리)", type="password")
         if st.button("입장하기"):
             if store_input and pw_input:
                 st.session_state.logged_in = True
                 st.session_state.store_name = store_input
-                if store_input != "관리자": log_login_event(store_input)
                 st.rerun()
             else: st.warning("정보를 입력해주세요.")
+    st.markdown(f"<div style='text-align:center; color:#888; margin-top:20px;'>👀 현재 <b>{total_visitors:,}명</b>의 사장님이 함께하고 계십니다.</div>", unsafe_allow_html=True)
     st.stop()
 
-# 메인 화면
+# 메인
 with st.sidebar:
     st.write(f"👤 **{st.session_state.store_name}**님")
-    
-    # 관리자 기능 (공지 쓰기 + 로그 보기)
-    if st.session_state.store_name == "관리자":
-        st.info("🔧 관리자 기능")
-        
-        # 공지 작성
-        with st.expander("📢 공지사항 등록"):
-            new_notice = st.text_input("공지 내용")
-            if st.button("공지 올리기"):
-                set_notice(new_notice)
-                st.success("등록됨")
-        
-        # 로그 보기
-        logs = get_login_logs()
-        st.markdown(f"<div class='visitor-badge'>Total: {len(logs):,}</div>", unsafe_allow_html=True)
-        with st.expander("접속 로그"):
-            if not logs.empty: st.dataframe(logs, hide_index=True)
-
-    with st.expander("📲 앱 설치 방법"):
-        st.info("카톡 우측 하단 점 3개 → [다른 브라우저로 열기] → [홈 화면에 추가]")
+    st.markdown(f"<div class='visitor-badge'>DOHA VISITORS<br>{total_visitors:,}</div>", unsafe_allow_html=True)
     if st.button("로그아웃"):
         st.session_state.logged_in = False
         st.rerun()
 
 st.title(f"🥕 DOHA 사장님 비서 ({st.session_state.store_name})")
-
-# [공지사항 바] 최상단 노출
-current_notice = get_notice()
-st.markdown(f"<div class='notice-bar'>📢 <b>[공지]</b> {current_notice}</div>", unsafe_allow_html=True)
-
-st.caption(f"오늘 날짜: {datetime.now().strftime('%Y년 %m월 %d일')}")
+st.markdown("""<div class='install-guide'><b>💡 꿀팁:</b> 카톡 말고 <b>[다른 브라우저로 열기]</b> 후 <b>[홈 화면에 추가]</b> 하세요!</div>""", unsafe_allow_html=True)
 
 # 탭 구성
-tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["🏠 홈", "🔍 당근검색", "⏰ 출퇴근", "🔥 보험점검", "💬 소통/제휴", "✍️ 홍보문구"])
+tab1, tab2, tab3, tab4, tab5 = st.tabs(["🏠 데일리 홈", "🔍 전국 당근검색", "⏰ 직원 출퇴근", "🔥 화재보험 점검", "📻 우리들의 방송국"])
 
-# [TAB 1~4] 기존 기능 유지
 with tab1:
     st.subheader("📰 오늘의 사장님 필수 뉴스")
     news_list = get_real_google_news()
@@ -289,9 +235,8 @@ with tab1:
                 color = "red" if data['change'] > 0 else "blue"
                 sign = "▲" if data['change'] > 0 else "▼"
                 st.markdown(f"<div class='finance-box'><div class='finance-title'>{name}</div><div class='finance-val'>{data['price']:,.2f}</div><div class='finance-change' style='color:{color};'>{sign} {abs(data['change']):.2f} ({data['pct']:.2f}%)</div></div>", unsafe_allow_html=True)
-        else: st.info("로딩 중...")
     with col_right:
-        st.subheader("🧮 오늘의 목표 매출")
+        st.subheader("🧮 스마트 매출 계산기")
         st.markdown("""<div class='metric-card'>고정비를 입력하면 <b>오늘 목표치</b>를 계산해드립니다.</div>""", unsafe_allow_html=True)
         c1, c2 = st.columns(2)
         month_fixed = c1.number_input("월 고정비 합계", value=4500000, step=10000)
@@ -345,8 +290,7 @@ with tab4:
         diff = curr - std
         if diff > 15000: st.error(f"🚨 보험료 {diff:,}원 과다 지출 의심!")
         else: st.success("✅ 보험료는 적정합니다.")
-        if liab_check == "아니요 / 잘 모르겠습니다.":
-            st.markdown("""<div style='background-color:#fff3cd; padding:20px; border-radius:10px; border:2px solid red; margin-top:20px;'><h3 style='color:red;'>🚨 [긴급 경고] 배상책임 미가입 위험!</h3><b>손님이 매장에서 다치면 큰일 납니다.</b> 즉시 확인이 필요합니다.</div>""", unsafe_allow_html=True)
+        if liab_check == "아니요 / 잘 모르겠습니다.": st.markdown("""<div style='background-color:#fff3cd; padding:20px; border-radius:10px; border:2px solid red; margin-top:20px;'><h3 style='color:red;'>🚨 [긴급 경고] 배상책임 미가입 위험!</h3><b>손님이 매장에서 다치면 큰일 납니다.</b> 즉시 확인이 필요합니다.</div>""", unsafe_allow_html=True)
     st.markdown("---")
     with st.form("starbucks_form_fire"):
         c1, c2 = st.columns(2)
@@ -361,38 +305,49 @@ with tab4:
                 else: st.error(m)
             else: st.warning("정보를 입력하세요.")
 
-# [TAB 5] 소통/제휴
+# =============================================================================
+# [TAB 5] 📻 우리들의 방송국 (업그레이드)
+# =============================================================================
 with tab5:
-    st.header("💬 사장님 대나무숲 (익명)")
-    st.caption("장사하면서 힘들었던 일, 궁금한 점 자유롭게 나누세요.")
-    with st.form("community_form"):
-        user_msg = st.text_input("하고 싶은 말", placeholder="익명으로 등록됩니다.")
-        if st.form_submit_button("글 남기기"):
-            if user_msg:
-                save_post(st.session_state.store_name, user_msg)
-                st.success("등록되었습니다.")
-                st.rerun()
-    st.markdown("---")
-    posts = get_posts()
-    if not posts.empty:
-        for idx, row in posts[::-1].iterrows():
-            st.markdown(f"<div class='chat-row'><span class='chat-user'>🥕 {row['user']}</span><span class='chat-time'>{row['timestamp']}</span><div class='chat-msg'>{row['message']}</div></div>", unsafe_allow_html=True)
-    else: st.info("첫 번째 글을 남겨주세요!")
-    st.markdown("<br><br>", unsafe_allow_html=True)
-    st.subheader("🤝 제휴 및 광고 문의")
-    st.info("식자재 납품, 인테리어, 마케팅 등 사장님들께 도움되는 업체의 제휴를 환영합니다.")
-    with st.expander("문의하기"):
-        st.markdown("이메일 문의: **kidoha84@gmail.com**")
+    st.header("📻 우리들의 방송국 (Open DJ)")
+    st.info("누구나 **DJ**가 되어 음악을 틀 수 있습니다. 오늘은 내가 DJ!")
+    
+    # 1. 방송국 목록 (청취)
+    st.subheader("📡 현재 송출 중인 방송")
+    df_stations = load_stations()
+    
+    # 방송국 선택
+    station_names = df_stations['store_name'].tolist()
+    choice = st.selectbox("어느 방송을 들을까요?", station_names)
+    
+    # 선택된 방송 송출
+    selected_row = df_stations[df_stations['store_name'] == choice].iloc[0]
+    
+    st.markdown(f"""
+    <div class='dj-card'>
+        <div class='dj-name'>🎧 DJ: {selected_row['store_name']}</div>
+        <div class='dj-comment'>💬 한마디: {selected_row['comment']}</div>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    try:
+        st.video(selected_row['url'])
+    except:
+        st.error("영상을 불러올 수 없습니다.")
 
-# [TAB 6] 홍보 문구 생성기
-with tab6:
-    st.header("✍️ AI 홍보 문구 생성기")
-    st.markdown("당근마켓, 인스타에 올릴 글, 고민하지 마세요!")
-    c1, c2 = st.columns(2)
-    menu_name = c1.text_input("메뉴/상품 이름", placeholder="예: 떡볶이, 겨울 코트")
-    vibe = c2.selectbox("원하는 느낌", ["감성", "유머", "강조"])
-    if st.button("✨ 문구 생성하기"):
-        if menu_name:
-            copy = generate_copy(menu_name, vibe)
-            st.markdown(f"<div style='background-color:#e3f2fd; padding:20px; border-radius:10px; margin-top:10px;'><h3>📝 추천 문구</h3><p style='font-size:1.2rem;'>{copy}</p></div>", unsafe_allow_html=True)
-        else: st.warning("상품 이름을 입력해주세요.")
+    st.markdown("---")
+    
+    # 2. 내 방송국 만들기 (등록)
+    with st.expander("🎙️ 나도 DJ 신청하기 (방송국 개설)"):
+        st.caption("유튜브 플레이리스트 링크를 넣어주세요.")
+        with st.form("dj_form"):
+            dj_url = st.text_input("유튜브 링크 (URL)", placeholder="https://youtube.com/...")
+            dj_comment = st.text_input("청취자들에게 한마디", placeholder="오늘 비오는데 파전에 막걸리 땡기는 노래입니다~")
+            
+            if st.form_submit_button("📡 내 방송국 등록"):
+                if dj_url and dj_comment:
+                    save_station(dj_url, dj_comment)
+                    st.success("방송국이 개설되었습니다! 목록에서 확인해보세요.")
+                    st.rerun()
+                else:
+                    st.warning("내용을 입력해주세요.")
