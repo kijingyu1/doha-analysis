@@ -56,16 +56,17 @@ def set_style():
         .install-guide { background-color: #e3f2fd; padding: 15px; border-radius: 10px; border: 1px solid #90caf9; margin-bottom: 15px; color: #0d47a1; font-size: 0.9rem; }
         .visitor-badge { background-color: #333; color: #00ff00; padding: 10px; border-radius: 5px; font-family: 'Courier New', monospace; text-align: center; font-weight: bold; margin-top: 20px; }
         
-        /* 라디오 버튼 스타일 */
         .radio-link-btn {
-            display: block; width: 100%; padding: 15px; margin-bottom: 10px;
-            background-color: #f1f3f5; border: 1px solid #ddd; border-radius: 10px;
+            display: block; width: 100%; padding: 10px; margin-top: 5px; margin-bottom: 15px;
+            background-color: #f1f3f5; border: 1px solid #ddd; border-radius: 5px;
             text-align: center; color: #333; text-decoration: none; font-weight: bold;
-            transition: 0.3s;
+            transition: 0.3s; font-size: 0.9rem;
         }
-        .radio-link-btn:hover { background-color: #e9ecef; border-color: #ff6f0f; color: #ff6f0f; }
+        .radio-link-btn:hover { background-color: #e9ecef; color: #ff6f0f; }
         
-        /* 장부 스타일 */
+        /* 공지사항 스타일 */
+        .notice-box { background-color: #fff3cd; color: #856404; padding: 15px; border-radius: 10px; border: 1px solid #ffeeba; margin-bottom: 20px; }
+        
         .ledger-summary { background-color: white; padding: 15px; border-radius: 10px; border: 1px solid #ddd; text-align: center; }
         .ledger-val { font-size: 1.3rem; font-weight: bold; color: #333; }
         .ledger-label { font-size: 0.9rem; color: #666; }
@@ -116,7 +117,6 @@ def get_finance_data():
         return data
     except: return {}
 
-# [뉴스] 1시간(3600초)마다 갱신 -> 9,12,18,21시 커버 가능
 @st.cache_data(ttl=3600)
 def get_real_google_news():
     keywords = ["소상공인", "자영업", "지원금", "정책", "세금", "창업", "폐업"]
@@ -133,6 +133,7 @@ def get_today_affirmation():
     random.seed(datetime.now().day)
     return random.choice(words)
 
+# [복구] 방문자 로그 관리
 VISITOR_FILE = "visitor_log.csv"
 def track_visitor():
     if not os.path.exists(VISITOR_FILE):
@@ -151,11 +152,22 @@ def get_visitor_count():
     if os.path.exists(VISITOR_FILE):
         try:
             df = pd.read_csv(VISITOR_FILE)
-            return len(df), df
-        except: return 0, pd.DataFrame()
-    return 0, pd.DataFrame()
+            return len(df), df, df # df도 반환
+        except: return 0, pd.DataFrame(), pd.DataFrame()
+    return 0, pd.DataFrame(), pd.DataFrame()
 
-# 장부(Ledger)
+# [복구] 공지사항 관리
+NOTICE_FILE = "notice.txt"
+def load_notice():
+    if os.path.exists(NOTICE_FILE):
+        with open(NOTICE_FILE, "r", encoding="utf-8") as f:
+            return f.read()
+    return "사장님들 힘내세요! 공지사항이 여기에 표시됩니다."
+def save_notice(text):
+    with open(NOTICE_FILE, "w", encoding="utf-8") as f:
+        f.write(text)
+
+# 장부
 LEDGER_FILE = "ledger_data.csv"
 def load_ledger():
     if os.path.exists(LEDGER_FILE): return pd.read_csv(LEDGER_FILE)
@@ -187,7 +199,7 @@ def save_attendance(name, action):
 # -----------------------------------------------------------------------------
 set_style()
 track_visitor()
-total_visitors, df_visitors = get_visitor_count()
+total_visitors, _, df_visitors_all = get_visitor_count()
 
 if 'logged_in' not in st.session_state: st.session_state.logged_in = False
 if 'store_name' not in st.session_state: st.session_state.store_name = ""
@@ -197,12 +209,11 @@ if not st.session_state.logged_in:
     st.markdown("<br><br>", unsafe_allow_html=True)
     c1, c2, c3 = st.columns([1, 2, 1])
     with c2:
-        # 사장님 로고 URL (아까 알려드린 postimages 주소 넣는 곳)
         LOGO_URL = "https://cdn-icons-png.flaticon.com/512/1995/1995515.png" 
         st.markdown(f"""<div class='login-box'><img src='{LOGO_URL}' style='width: 150px; margin-bottom: 20px; border-radius: 20px;'><p style='font-size: 1.1rem; font-weight: bold; color: #555;'>로그인</p></div>""", unsafe_allow_html=True)
         with st.expander("📲 카톡에서 들어오셨나요?"):
             st.markdown("**우측 하단 점 3개 → [다른 브라우저로 열기]**")
-        store_input = st.text_input("매장 이름")
+        store_input = st.text_input("매장 이름 (관리자는 'admin')")
         pw_input = st.text_input("비밀번호 (4자리)", type="password")
         if st.button("입장하기"):
             if store_input and pw_input:
@@ -217,12 +228,31 @@ if not st.session_state.logged_in:
 with st.sidebar:
     st.write(f"👤 **{st.session_state.store_name}**님")
     st.markdown(f"<div class='visitor-badge'>VISITORS<br>{total_visitors:,}</div>", unsafe_allow_html=True)
+    
+    # [복구] 상세 방문자 로그
+    with st.expander("🕵️‍♂️ 접속 로그 (상세)"):
+        if not df_visitors_all.empty:
+            st.dataframe(df_visitors_all.sort_values("timestamp", ascending=False).head(10), hide_index=True)
+        else: st.write("기록 없음")
+        
     if st.button("로그아웃"):
         st.session_state.logged_in = False
         st.rerun()
 
 st.markdown(f"""<h1>🥕 사장님 비서<br><span class='store-subtitle'>({st.session_state.store_name})</span></h1>""", unsafe_allow_html=True)
 st.markdown("""<div class='install-guide'><b>💡 꿀팁:</b> 카톡 말고 <b>[다른 브라우저로 열기]</b> 후 <b>[홈 화면에 추가]</b> 하세요!</div>""", unsafe_allow_html=True)
+
+# [복구] 공지사항 (관리자만 수정 가능)
+current_notice = load_notice()
+if st.session_state.store_name in ["admin", "관리자"]:
+    with st.expander("📢 공지사항 수정 (관리자용)"):
+        new_notice = st.text_area("공지 내용", current_notice)
+        if st.button("공지 업데이트"):
+            save_notice(new_notice)
+            st.success("수정 완료!")
+            st.rerun()
+
+st.markdown(f"""<div class='notice-box'><b>📢 필독 공지:</b> {current_notice}</div>""", unsafe_allow_html=True)
 
 tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["🏠 데일리 홈", "🔍 전국 당근검색", "⏰ 직원 출퇴근", "🔥 화재보험 점검", "📻 실시간 라디오", "📒 사장님 장부"])
 
@@ -239,7 +269,6 @@ with tab1:
                 date_str = f"{news.published_parsed.tm_mon}/{news.published_parsed.tm_mday}"
                 st.markdown(f"<div class='news-item'><span style='color:#ff6f0f;'>●</span> <a href='{news.link}' target='_blank'>{news.title}</a> <span class='news-date'>{date_str}</span></div>", unsafe_allow_html=True)
             st.markdown("</div>", unsafe_allow_html=True)
-            # 최근 갱신 시간 표시
             now_str = datetime.now().strftime("%H시 %M분")
             st.markdown(f"<div class='news-update-time'>최근 갱신: {now_str} 기준</div>", unsafe_allow_html=True)
             
@@ -326,32 +355,38 @@ with tab4:
             else: st.warning("정보를 입력하세요.")
 
 # =============================================================================
-# [TAB 5] 📻 실시간 라디오 (전면 개편)
+# [TAB 5] 📻 실시간 라디오 (유튜브 연결 오류 해결)
 # =============================================================================
 with tab5:
     st.header("📻 실시간 공중파 라디오")
-    st.info("뉴스, 음악, 교통정보를 실시간으로 들어보세요.")
+    st.info("⚠️ 방송사 사정에 따라 앱 내 재생이 안 될 수 있습니다. 그럴 땐 아래 **'📺 바로 보기'** 버튼을 눌러주세요!")
     
-    # 1. 앱 내에서 바로 재생 가능한 채널 (유튜브 임베드 지원 채널)
-    st.subheader("▶ 바로 듣기 (뉴스/음악)")
+    radio_type = st.radio("채널 선택", ["YTN 라디오 (24시간 뉴스)", "KBS Cool FM (보이는 라디오)", "TBS 교통방송", "재즈/팝 (Lofi)"], horizontal=True)
     
-    radio_type = st.radio("채널 선택", ["YTN 라디오 (24시간 뉴스)", "TBS 교통방송 (김어준X)", "KBS Cool FM (보이는 라디오/음악)", "재즈/팝 음악방송 (광고X)"], horizontal=True)
-    
+    # URL 및 ID 설정 (가장 최신 라이브 스트림)
+    ytn_url = "https://www.youtube.com/watch?v=GoXFbC1i1bw"
+    kbs_url = "https://www.youtube.com/watch?v=p4M-jO4n62w" # 링크가 자주 바뀜
+    tbs_url = "https://www.youtube.com/watch?v=Eqi9C5YQG6E"
+    jazz_url = "https://www.youtube.com/watch?v=5qap5aO4i9A"
+
     if radio_type == "YTN 라디오 (24시간 뉴스)":
-        st.video("https://www.youtube.com/watch?v=GoXFbC1i1bw") # YTN 실시간
-    elif radio_type == "TBS 교통방송 (김어준X)":
-        st.video("https://www.youtube.com/watch?v=Eqi9C5YQG6E") # TBS 실시간
-    elif radio_type == "KBS Cool FM (보이는 라디오/음악)":
-        st.video("https://www.youtube.com/watch?v=p4M-jO4n62w") # KBS Cool FM (링크 변동 가능성 있음)
-    elif radio_type == "재즈/팝 음악방송 (광고X)":
-        st.video("https://www.youtube.com/watch?v=5qap5aO4i9A") # Lofi Girl (저작권 안전)
+        st.video(ytn_url)
+        st.markdown(f"<a href='{ytn_url}' target='_blank' class='radio-link-btn'>📺 YTN이 안 나오면 클릭 (유튜브로 연결)</a>", unsafe_allow_html=True)
+        
+    elif radio_type == "KBS Cool FM (보이는 라디오)":
+        st.video(kbs_url)
+        st.markdown(f"<a href='{kbs_url}' target='_blank' class='radio-link-btn'>📺 KBS가 안 나오면 클릭 (유튜브로 연결)</a>", unsafe_allow_html=True)
+
+    elif radio_type == "TBS 교통방송":
+        st.video(tbs_url)
+        st.markdown(f"<a href='{tbs_url}' target='_blank' class='radio-link-btn'>📺 TBS가 안 나오면 클릭 (유튜브로 연결)</a>", unsafe_allow_html=True)
+
+    elif radio_type == "재즈/팝 (Lofi)":
+        st.video(jazz_url)
+        st.caption("광고 없는 음악 방송입니다.")
         
     st.markdown("---")
-    
-    # 2. 메이저 방송사 연결 (저작권 때문에 링크로 연결)
-    st.subheader("📡 메이저 방송사 연결 (SBS/MBC)")
-    st.caption("※ SBS, MBC는 정책상 앱 내 재생이 불가하여, 공식 플레이어를 띄워드립니다.")
-    
+    st.subheader("📡 메이저 방송사 (앱 내 재생 불가 → 공식 연결)")
     c1, c2 = st.columns(2)
     with c1:
         st.markdown("<a href='https://w3.sbs.co.kr/radio/gorealraMain.do' target='_blank' class='radio-link-btn'>🦍 SBS 고릴라 (파워FM/러브FM)</a>", unsafe_allow_html=True)
