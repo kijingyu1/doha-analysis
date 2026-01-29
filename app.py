@@ -8,27 +8,31 @@ from geopy.geocoders import Nominatim
 import os
 import time
 import random
-import smtplib  # 메일 전송 모듈
-from email.mime.text import MIMEText # 메일 본문 작성 모듈
+import smtplib
+from email.mime.text import MIMEText
 
 # -----------------------------------------------------------------------------
 # [0] 페이지 설정
 # -----------------------------------------------------------------------------
 st.set_page_config(
-    page_title="간단 상권분석기 (Beta)",
+    page_title="DOHA ANALYSIS (Beta)",
     page_icon="🏙️",
     layout="wide",
     initial_sidebar_state="collapsed"
 )
 
 # -----------------------------------------------------------------------------
-# [기능] 메일 전송 함수 (지메일 연동)
+# [기능] 메일 전송 함수 (안전장치 추가됨!)
 # -----------------------------------------------------------------------------
 def send_email(name, phone, client_email, request_text, pref_time):
-    # 스트림릿 Secrets에서 정보 가져오기
+    # 1. Secrets 설정 확인 (여기서 오류를 잡아냅니다)
+    if "smtp" not in st.secrets:
+        st.error("🚨 [설정 오류] 스트림릿 Secrets에 '[smtp]' 항목이 없습니다.")
+        return False
+
     sender_email = st.secrets["smtp"]["email"]
     sender_password = st.secrets["smtp"]["password"]
-    receiver_email = sender_email # 내 메일로 보냄
+    receiver_email = sender_email 
 
     subject = f"🔥 [DOHA 문의] {name}님 상담 요청 도착!"
     body = f"""
@@ -51,13 +55,13 @@ def send_email(name, phone, client_email, request_text, pref_time):
     msg['To'] = receiver_email
 
     try:
-        # 지메일 서버 접속
         with smtplib.SMTP_SSL('smtp.gmail.com', 465) as server:
             server.login(sender_email, sender_password)
             server.sendmail(sender_email, receiver_email, msg.as_string())
         return True
     except Exception as e:
-        st.error(f"메일 전송 오류: {e}")
+        st.error(f"❌ 메일 전송 실패 (원인: {e})")
+        st.error("팁: 구글 '앱 비밀번호'가 맞는지, 오타는 없는지 확인해주세요.")
         return False
 
 # -----------------------------------------------------------------------------
@@ -109,7 +113,7 @@ def set_style():
 MY_KEY = "812fa5d3b23f43b70156810df8185abaee5960b4f233858a3ccb3eb3844c86ff"
 
 def get_real_store_count(address, keyword):
-    geolocator = Nominatim(user_agent="doha_beta_v3")
+    geolocator = Nominatim(user_agent="doha_beta_v3_fix")
     try:
         location = geolocator.geocode(address)
         if not location: return None, None, 0, []
@@ -252,7 +256,5 @@ if analyze_btn:
                     if success:
                         st.success(f"✅ {name}님, 신청이 완료되었습니다! 확인 후 {phone}으로 연락드리겠습니다.")
                         st.balloons()
-                    else:
-                        st.error("전송 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.")
     else:
         st.info("👈 왼쪽 사이드바에 주소와 업종을 입력하고 [상권분석 시작하기]를 눌러주세요.")
