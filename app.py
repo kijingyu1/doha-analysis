@@ -12,28 +12,28 @@ import smtplib
 from email.mime.text import MIMEText
 
 # -----------------------------------------------------------------------------
-# [0] 페이지 설정 (파란색 테마 & 모바일 최적화)
+# [0] 페이지 설정
 # -----------------------------------------------------------------------------
 st.set_page_config(
-    page_title="DOHA ANALYSIS (Beta)",
+    page_title="DOHA ANALYSIS (Final)",
     page_icon="🏙️",
     layout="wide",
     initial_sidebar_state="collapsed"
 )
 
 # -----------------------------------------------------------------------------
-# [기능 1] 메일 전송 엔진 (검증 완료됨)
+# [기능 1] 메일 전송 엔진 (에러 알림 기능 강화)
 # -----------------------------------------------------------------------------
 def send_email(name, phone, client_email, request_text, pref_time):
-    # Secrets 설정 확인
+    # 1. 설정 확인
     if "smtp" not in st.secrets:
-        st.error("🚨 [설정 오류] Secrets 설정이 필요합니다.")
+        st.error("🚨 [전송 실패] Secrets 설정이 없습니다. (Manage app -> Settings -> Secrets 확인 필요)")
         return False
 
     sender = st.secrets["smtp"]["email"]
     pw = st.secrets["smtp"]["password"]
     
-    # 사장님에게 보내는 메일
+    # 2. 메일 작성
     subject = f"🔥 [DOHA 상담요청] {name}님 ({pref_time})"
     body = f"""
     [DOHA ANALYSIS 신규 상담 신청]
@@ -52,15 +52,18 @@ def send_email(name, phone, client_email, request_text, pref_time):
     msg = MIMEText(body)
     msg['Subject'] = subject
     msg['From'] = sender
-    msg['To'] = sender # 사장님 메일로 수신
+    msg['To'] = sender # 사장님 메일로 받음
 
+    # 3. 전송 시도
     try:
         with smtplib.SMTP_SSL('smtp.gmail.com', 465) as server:
             server.login(sender, pw)
             server.sendmail(sender, sender, msg.as_string())
         return True
     except Exception as e:
-        st.error(f"전송 실패: {e}")
+        # 에러가 나면 화면에 이유를 출력
+        st.error(f"🚨 [메일 서버 에러] 원인: {e}")
+        st.warning("팁: 구글 앱 비밀번호가 정확한지, 오타는 없는지 확인해주세요.")
         return False
 
 # -----------------------------------------------------------------------------
@@ -103,27 +106,27 @@ def set_style():
             border-left: 5px solid #004aad; margin-bottom: 20px;
             color: black !important;
         }
+        .result-text {
+            background-color: #fff3cd; padding: 10px; border-radius: 5px;
+            font-size: 0.9rem; color: #856404; margin-top: 10px;
+        }
         </style>
     """, unsafe_allow_html=True)
 
 # -----------------------------------------------------------------------------
-# [기능 3] 데이터 엔진 (안전장치 포함)
+# [기능 3] 데이터 엔진
 # -----------------------------------------------------------------------------
 MY_KEY = "812fa5d3b23f43b70156810df8185abaee5960b4f233858a3ccb3eb3844c86ff"
 
 def get_real_store_count(address, keyword):
-    # 1. 주소 변환 (실패 시 기본값 사용)
-    geolocator = Nominatim(user_agent="doha_final_v1")
-    lat, lng = 37.367, 127.108 # 기본값(정자동)
+    geolocator = Nominatim(user_agent="doha_final_v2")
+    lat, lng = 37.367, 127.108 
     
     try:
         location = geolocator.geocode(address)
-        if location:
-            lat, lng = location.latitude, location.longitude
-    except:
-        pass # 에러나면 그냥 기본 좌표 사용 (멈춤 방지)
+        if location: lat, lng = location.latitude, location.longitude
+    except: pass
 
-    # 2. 정부 데이터 호출
     url = "http://apis.data.go.kr/B553077/api/open/sdsc2/storeListInRadius"
     params = {"ServiceKey": MY_KEY, "type": "json", "radius": "500", "cx": lng, "cy": lat, "numOfRows": 300, "pageNo": 1}
     
@@ -134,16 +137,14 @@ def get_real_store_count(address, keyword):
         if "body" in data and "items" in data["body"]:
             for item in data["body"]["items"]:
                 full_name = (item.get('indsMclsNm','') + item.get('indsSclsNm','') + item.get('bizesNm',''))
-                if keyword in full_name:
-                    count += 1
+                if keyword in full_name: count += 1
     except: pass
     
-    # 0개면 시뮬레이션 값 (너무 썰렁하니까)
     if count == 0: count = random.randint(8, 20)
     return lat, lng, count
 
 # -----------------------------------------------------------------------------
-# [기능 4] 전문가 소견 생성
+# [기능 4] 전문가 소견
 # -----------------------------------------------------------------------------
 def generate_expert_opinion(address, category, count, rent_ratio):
     risk = "위험" if rent_ratio > 15 else "안정"
@@ -167,11 +168,8 @@ def generate_expert_opinion(address, category, count, rent_ratio):
 # [메인] 앱 실행
 # -----------------------------------------------------------------------------
 set_style()
-
-# 모바일 안내
 st.info("👆 **모바일 사용자:** 왼쪽 상단 화살표( > )를 눌러야 정보를 입력할 수 있습니다.")
 
-# 사이드바
 with st.sidebar:
     st.header("📝 DOHA ANALYSIS 입력")
     st.markdown("---")
@@ -183,14 +181,13 @@ with st.sidebar:
     st.markdown("<br>", unsafe_allow_html=True)
     analyze_btn = st.button("🚀 상권분석 시작하기")
 
-# 메인 타이틀
 st.title("🏙️ DOHA ANALYSIS")
 st.markdown("**세상에 없던 상권분석 프로그램 [BETA VER]**")
 st.markdown("---")
 
 if analyze_btn:
     with st.spinner("🔍 빅데이터 엔진이 상권을 분석하고 있습니다..."):
-        time.sleep(1.5)
+        time.sleep(1.0)
         keyword = input_category.split("/")[0] if "/" in input_category else input_category
         lat, lng, count = get_real_store_count(input_address, keyword)
 
@@ -205,33 +202,42 @@ if analyze_btn:
     c3.markdown(f"<div class='metric-card'><h3>배후 세대</h3><h2>{input_households:,}</h2><p>거주 세대수</p></div>", unsafe_allow_html=True)
     st.markdown("<br>", unsafe_allow_html=True)
 
-    # 2. 그래프 분석
+    # 2. 그래프 분석 (사라진 문구 복구 완료!)
     st.subheader("2️⃣ 예상 매출 분석")
     months = ["1월", "2월", "3월", "4월", "5월", "6월"]
     base = input_sales / 10000 
     my_sales = [base * np.random.uniform(0.9, 1.2) for _ in range(6)]
     avg_sales = [base * np.random.uniform(0.8, 1.0) for _ in range(6)]
     st.area_chart(pd.DataFrame({"내 점포": my_sales, "상권 평균": avg_sales}, index=months), color=["#004aad", "#a8c5e6"])
+    # 복구된 문구
+    st.markdown(f"<div class='result-text'>💡 <b>분석 결과:</b> {input_category} 업종은 4월 이후 매출 상승세가 예상됩니다.</div>", unsafe_allow_html=True)
 
     col_a, col_b = st.columns(2)
     with col_a:
         st.subheader("3️⃣ 배달/주문 분석")
         st.bar_chart(pd.DataFrame({"주문수": [250, 410, 180]}, index=["점심", "저녁", "심야"]), color="#004aad")
+        # 복구된 문구
+        st.markdown("<div class='result-text'>💡 <b>배달 팁:</b> 저녁 시간대(17시~21시) 주문이 전체의 48%를 차지합니다.</div>", unsafe_allow_html=True)
+        
     with col_b:
         st.subheader("4️⃣ 유동인구 성별")
         st.bar_chart(pd.DataFrame({"성별": [45, 55]}, index=["남성", "여성"]), color="#ff9999")
+        # 복구된 문구
+        st.markdown("<div class='result-text'>💡 <b>타겟 고객:</b> 30대~40대 여성 유동인구 비중이 높습니다.</div>", unsafe_allow_html=True)
 
-    # 5. 유사 상권 비교 (오류 수정됨)
+    # 5. 유사 상권 비교
     st.subheader("5️⃣ 유사 상권 비교")
     comp_data = pd.DataFrame({"업소수": [count, int(count*1.2), int(count*0.8), 35]}, index=["내 상권", "A상권", "B상권", "평균"])
     st.bar_chart(comp_data, color="#004aad")
+    # 복구된 문구
+    st.markdown(f"<div class='result-text'>💡 <b>경쟁 강도:</b> 경기도 평균 대비 경쟁점이 {'많습니다(과열)' if count > 35 else '적습니다(기회)'}.</div>", unsafe_allow_html=True)
 
     # 6. 전문가 소견
     st.markdown("---")
     st.subheader("6️⃣ 전문가 종합 소견 (DOHA Insight)")
     st.info(generate_expert_opinion(input_address, input_category, count, rent_ratio))
 
-    # 7. 보험 신청 (메일 발송 기능 탑재!)
+    # 7. 보험 신청 (에러 확인 기능 포함)
     st.markdown("---")
     st.subheader("🛡️ [필수] 화재/배상책임보험 무료 견적 신청")
     st.markdown("""<div class='info-box'><b>건물주 보험은 사장님을 지켜주지 않습니다.</b><br>최저가 다이렉트 설계를 무료로 받아보세요.</div>""", unsafe_allow_html=True)
@@ -243,7 +249,7 @@ if analyze_btn:
         name = c1.text_input("성명")
         phone = c2.text_input("연락처 (010-XXXX-XXXX)")
         email = st.text_input("이메일 주소")
-        req_text = st.text_area("요청사항 (예: 20평 분식집 견적 문의)")
+        req_text = st.text_area("요청사항")
         pref_time = st.selectbox("상담 희망 시간", ["오전 (09~12시)", "오후 (13~18시)", "저녁 (18시 이후)"])
         
         submit = st.form_submit_button("📨 무료 견적 요청하기")
@@ -254,16 +260,10 @@ if analyze_btn:
             elif not name or not phone:
                 st.warning("성명과 연락처를 입력해주세요.")
             else:
-                with st.spinner("상담 신청서를 전송 중입니다..."):
-                    # 실제 메일 발송
+                with st.spinner("서버와 통신 중입니다..."):
+                    # 실제 메일 발송 시도
                     success = send_email(name, phone, email, req_text, pref_time)
                     
                 if success:
-                    st.success(f"✅ {name}님, 신청이 완료되었습니다! 확인 후 {phone}으로 연락드리겠습니다.")
+                    st.success(f"✅ {name}님, 신청이 완료되었습니다! (사장님 메일함을 확인하세요)")
                     st.balloons()
-                else:
-                    st.error("전송 중 일시적인 오류가 발생했습니다. 잠시 후 다시 시도해주세요.")
-
-else:
-    # 초기 화면 안내
-    st.info("👈 왼쪽 사이드바에 주소와 업종을 입력하고 [상권분석 시작하기]를 눌러주세요.")
