@@ -22,12 +22,12 @@ st.set_page_config(
 )
 
 # -----------------------------------------------------------------------------
-# [기능 1] 메일 전송 엔진 (에러 알림 기능 강화)
+# [기능 1] 메일 전송 엔진 (포트 587 변경 + 정밀 진단)
 # -----------------------------------------------------------------------------
 def send_email(name, phone, client_email, request_text, pref_time):
     # 1. 설정 확인
     if "smtp" not in st.secrets:
-        st.error("🚨 [전송 실패] Secrets 설정이 없습니다. (Manage app -> Settings -> Secrets 확인 필요)")
+        st.error("🚨 [설정 오류] Secrets 설정이 없습니다!")
         return False
 
     sender = st.secrets["smtp"]["email"]
@@ -52,18 +52,19 @@ def send_email(name, phone, client_email, request_text, pref_time):
     msg = MIMEText(body)
     msg['Subject'] = subject
     msg['From'] = sender
-    msg['To'] = sender # 사장님 메일로 받음
+    msg['To'] = sender 
 
-    # 3. 전송 시도
+    # 3. 전송 시도 (포트 587 + starttls 방식 사용)
     try:
-        with smtplib.SMTP_SSL('smtp.gmail.com', 465) as server:
-            server.login(sender, pw)
-            server.sendmail(sender, sender, msg.as_string())
+        # SMTP 서버 연결 (타임아웃 10초 설정)
+        server = smtplib.SMTP('smtp.gmail.com', 587, timeout=10)
+        server.starttls() # 보안 연결 시작
+        server.login(sender, pw) # 로그인
+        server.sendmail(sender, sender, msg.as_string()) # 전송
+        server.quit()
         return True
     except Exception as e:
-        # 에러가 나면 화면에 이유를 출력
-        st.error(f"🚨 [메일 서버 에러] 원인: {e}")
-        st.warning("팁: 구글 앱 비밀번호가 정확한지, 오타는 없는지 확인해주세요.")
+        st.error(f"🚨 [메일 전송 실패] 원인: {e}")
         return False
 
 # -----------------------------------------------------------------------------
@@ -119,7 +120,7 @@ def set_style():
 MY_KEY = "812fa5d3b23f43b70156810df8185abaee5960b4f233858a3ccb3eb3844c86ff"
 
 def get_real_store_count(address, keyword):
-    geolocator = Nominatim(user_agent="doha_final_v2")
+    geolocator = Nominatim(user_agent="doha_final_v5")
     lat, lng = 37.367, 127.108 
     
     try:
@@ -168,6 +169,27 @@ def generate_expert_opinion(address, category, count, rent_ratio):
 # [메인] 앱 실행
 # -----------------------------------------------------------------------------
 set_style()
+
+# =============================================================================
+# 🔧 [시스템 진단 패널] - 여기가 핵심입니다!
+# =============================================================================
+with st.expander("🔧 시스템 상태 확인 (사장님 전용)", expanded=True):
+    c1, c2 = st.columns(2)
+    # 1. 비밀번호 설정 확인
+    if "smtp" in st.secrets and "email" in st.secrets["smtp"]:
+        my_email = st.secrets["smtp"]["email"]
+        c1.success(f"✅ 메일 설정 완료! ({my_email[:3]}***@gmail.com)")
+    else:
+        c1.error("❌ 메일 설정(Secrets)이 비어있습니다!")
+        c1.info("Streamlit Settings -> Secrets 에 내용을 채워주세요.")
+        
+    # 2. 정부 데이터 키 확인
+    if MY_KEY:
+        c2.success("✅ 정부 데이터 키 적용됨")
+    else:
+        c2.error("❌ 인증키 없음")
+
+# 모바일 안내
 st.info("👆 **모바일 사용자:** 왼쪽 상단 화살표( > )를 눌러야 정보를 입력할 수 있습니다.")
 
 with st.sidebar:
@@ -202,34 +224,30 @@ if analyze_btn:
     c3.markdown(f"<div class='metric-card'><h3>배후 세대</h3><h2>{input_households:,}</h2><p>거주 세대수</p></div>", unsafe_allow_html=True)
     st.markdown("<br>", unsafe_allow_html=True)
 
-    # 2. 그래프 분석 (사라진 문구 복구 완료!)
+    # 2. 그래프 분석 (문구 포함)
     st.subheader("2️⃣ 예상 매출 분석")
     months = ["1월", "2월", "3월", "4월", "5월", "6월"]
     base = input_sales / 10000 
     my_sales = [base * np.random.uniform(0.9, 1.2) for _ in range(6)]
     avg_sales = [base * np.random.uniform(0.8, 1.0) for _ in range(6)]
     st.area_chart(pd.DataFrame({"내 점포": my_sales, "상권 평균": avg_sales}, index=months), color=["#004aad", "#a8c5e6"])
-    # 복구된 문구
     st.markdown(f"<div class='result-text'>💡 <b>분석 결과:</b> {input_category} 업종은 4월 이후 매출 상승세가 예상됩니다.</div>", unsafe_allow_html=True)
 
     col_a, col_b = st.columns(2)
     with col_a:
         st.subheader("3️⃣ 배달/주문 분석")
         st.bar_chart(pd.DataFrame({"주문수": [250, 410, 180]}, index=["점심", "저녁", "심야"]), color="#004aad")
-        # 복구된 문구
         st.markdown("<div class='result-text'>💡 <b>배달 팁:</b> 저녁 시간대(17시~21시) 주문이 전체의 48%를 차지합니다.</div>", unsafe_allow_html=True)
         
     with col_b:
         st.subheader("4️⃣ 유동인구 성별")
         st.bar_chart(pd.DataFrame({"성별": [45, 55]}, index=["남성", "여성"]), color="#ff9999")
-        # 복구된 문구
         st.markdown("<div class='result-text'>💡 <b>타겟 고객:</b> 30대~40대 여성 유동인구 비중이 높습니다.</div>", unsafe_allow_html=True)
 
     # 5. 유사 상권 비교
     st.subheader("5️⃣ 유사 상권 비교")
     comp_data = pd.DataFrame({"업소수": [count, int(count*1.2), int(count*0.8), 35]}, index=["내 상권", "A상권", "B상권", "평균"])
     st.bar_chart(comp_data, color="#004aad")
-    # 복구된 문구
     st.markdown(f"<div class='result-text'>💡 <b>경쟁 강도:</b> 경기도 평균 대비 경쟁점이 {'많습니다(과열)' if count > 35 else '적습니다(기회)'}.</div>", unsafe_allow_html=True)
 
     # 6. 전문가 소견
@@ -237,33 +255,33 @@ if analyze_btn:
     st.subheader("6️⃣ 전문가 종합 소견 (DOHA Insight)")
     st.info(generate_expert_opinion(input_address, input_category, count, rent_ratio))
 
-    # 7. 보험 신청 (에러 확인 기능 포함)
+    # 7. 보험 신청 (안정형 Form)
     st.markdown("---")
     st.subheader("🛡️ [필수] 화재/배상책임보험 무료 견적 신청")
     st.markdown("""<div class='info-box'><b>건물주 보험은 사장님을 지켜주지 않습니다.</b><br>최저가 다이렉트 설계를 무료로 받아보세요.</div>""", unsafe_allow_html=True)
     
-    with st.form("final_form"):
-        st.markdown("#### 📋 1분 간편 상담 신청서")
-        agree = st.checkbox("[(필수) 개인정보 수집 및 이용에 동의합니다.]")
-        c1, c2 = st.columns(2)
-        name = c1.text_input("성명")
-        phone = c2.text_input("연락처 (010-XXXX-XXXX)")
-        email = st.text_input("이메일 주소")
-        req_text = st.text_area("요청사항")
-        pref_time = st.selectbox("상담 희망 시간", ["오전 (09~12시)", "오후 (13~18시)", "저녁 (18시 이후)"])
-        
-        submit = st.form_submit_button("📨 무료 견적 요청하기")
-        
-        if submit:
-            if not agree:
-                st.warning("개인정보 수집에 동의해주세요.")
-            elif not name or not phone:
-                st.warning("성명과 연락처를 입력해주세요.")
-            else:
-                with st.spinner("서버와 통신 중입니다..."):
-                    # 실제 메일 발송 시도
-                    success = send_email(name, phone, email, req_text, pref_time)
-                    
-                if success:
-                    st.success(f"✅ {name}님, 신청이 완료되었습니다! (사장님 메일함을 확인하세요)")
-                    st.balloons()
+    # 폼 대신 일반 입력창 사용 (오류 최소화)
+    st.markdown("#### 📋 1분 간편 상담 신청서")
+    
+    c1, c2 = st.columns(2)
+    name = c1.text_input("성명", key="name")
+    phone = c2.text_input("연락처 (010-XXXX-XXXX)", key="phone")
+    email = st.text_input("이메일 주소", key="email")
+    req_text = st.text_area("요청사항", key="req")
+    pref_time = st.selectbox("상담 희망 시간", ["오전 (09~12시)", "오후 (13~18시)", "저녁 (18시 이후)"], key="time")
+    
+    agree = st.checkbox("[(필수) 개인정보 수집 및 이용에 동의합니다.]", key="agree")
+    
+    # 전송 버튼
+    if st.button("📨 무료 견적 요청하기 (전송)", type="primary"):
+        if not agree:
+            st.warning("⚠️ 개인정보 수집에 동의해주세요.")
+        elif not name or not phone:
+            st.warning("⚠️ 성명과 연락처를 입력해주세요.")
+        else:
+            with st.spinner("서버와 통신 중입니다..."):
+                success = send_email(name, phone, email, req_text, pref_time)
+                
+            if success:
+                st.success(f"✅ {name}님, 신청이 완료되었습니다! (사장님 메일함을 확인하세요)")
+                st.balloons()
