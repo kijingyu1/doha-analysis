@@ -11,7 +11,7 @@ from email.mime.text import MIMEText
 import os
 
 # -----------------------------------------------------------------------------
-# [0] 페이지 설정
+# [0] 페이지 설정 및 관리자 비밀번호 설정
 # -----------------------------------------------------------------------------
 st.set_page_config(
     page_title="사장님 비서",
@@ -20,6 +20,9 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
+# 🔐 [중요] 관리자 전용 비밀번호 (사장님만 아는 번호로 바꾸세요!)
+ADMIN_PW = "7777" 
+
 # -----------------------------------------------------------------------------
 # [기능 1] 스타일
 # -----------------------------------------------------------------------------
@@ -27,13 +30,10 @@ def set_style():
     st.markdown("""
         <style>
         .main { background-color: #f8f9fa; }
-        
-        /* 타이틀 스타일 */
         h1 { color: #ff6f0f; font-weight: 800; line-height: 1.2; }
         .store-subtitle { color: #333; font-size: 1.5rem; font-weight: bold; margin-top: 5px; }
         h2, h3 { color: #ff6f0f; font-weight: 800; } 
         
-        /* 박스 스타일 */
         .finance-box { background-color: white; padding: 10px; border-radius: 10px; box-shadow: 1px 1px 3px rgba(0,0,0,0.1); text-align: center; margin-bottom: 8px; }
         .finance-title { font-size: 0.8rem; color: #666; font-weight: bold; }
         .finance-val { font-size: 1.1rem; font-weight: bold; color: #333; }
@@ -56,10 +56,8 @@ def set_style():
         .install-guide { background-color: #e3f2fd; padding: 15px; border-radius: 10px; border: 1px solid #90caf9; margin-bottom: 15px; color: #0d47a1; font-size: 0.9rem; }
         .visitor-badge { background-color: #333; color: #00ff00; padding: 10px; border-radius: 5px; font-family: 'Courier New', monospace; text-align: center; font-weight: bold; margin-top: 20px; }
         
-        /* 공지사항 스타일 */
         .notice-box { background-color: #fff3cd; color: #856404; padding: 15px; border-radius: 10px; border: 1px solid #ffeeba; margin-bottom: 20px; }
         
-        /* 장부 스타일 */
         .ledger-summary { background-color: white; padding: 15px; border-radius: 10px; border: 1px solid #ddd; text-align: center; }
         .ledger-val { font-size: 1.3rem; font-weight: bold; color: #333; }
         .ledger-label { font-size: 0.9rem; color: #666; }
@@ -160,13 +158,12 @@ def save_notice(text):
     with open(NOTICE_FILE, "w", encoding="utf-8") as f:
         f.write(text)
 
-# [NEW] 사장님 라디오 URL 저장/관리
+# 라디오 URL
 RADIO_URL_FILE = "radio_url.txt"
 def load_radio_url():
     if os.path.exists(RADIO_URL_FILE):
         with open(RADIO_URL_FILE, "r", encoding="utf-8") as f:
             return f.read().strip()
-    # 기본값: 재즈 라디오 (잘 나온다고 확인된 것)
     return "https://www.youtube.com/watch?v=5qap5aO4i9A"
 
 def save_radio_url(url):
@@ -220,14 +217,29 @@ if not st.session_state.logged_in:
         st.markdown(f"""<div class='login-box'><img src='{LOGO_URL}' style='width: 150px; margin-bottom: 20px; border-radius: 20px;'><p style='font-size: 1.1rem; font-weight: bold; color: #555;'>로그인</p></div>""", unsafe_allow_html=True)
         with st.expander("📲 카톡에서 들어오셨나요?"):
             st.markdown("**우측 하단 점 3개 → [다른 브라우저로 열기]**")
-        store_input = st.text_input("매장 이름 (관리자는 'admin')")
+            
+        # 🔑 [보안 패치] 관리자 힌트 제거
+        store_input = st.text_input("매장 이름")
         pw_input = st.text_input("비밀번호 (4자리)", type="password")
+        
         if st.button("입장하기"):
-            if store_input and pw_input:
+            # 1. 관리자 로그인 시도 (ID가 admin 또는 관리자인 경우)
+            if store_input in ["admin", "관리자"]:
+                if pw_input == ADMIN_PW: # 비밀번호 일치 확인
+                    st.session_state.logged_in = True
+                    st.session_state.store_name = store_input
+                    st.rerun()
+                else:
+                    st.error("❌ 관리자 비밀번호가 틀렸습니다.")
+            
+            # 2. 일반 사장님 로그인 시도
+            elif store_input and pw_input:
                 st.session_state.logged_in = True
                 st.session_state.store_name = store_input
                 st.rerun()
-            else: st.warning("정보를 입력해주세요.")
+            else:
+                st.warning("정보를 입력해주세요.")
+                
     st.markdown(f"<div style='text-align:center; color:#888; margin-top:20px;'>👀 현재 <b>{total_visitors:,}명</b>의 사장님이 함께하고 계십니다.</div>", unsafe_allow_html=True)
     st.stop()
 
@@ -260,7 +272,7 @@ st.markdown(f"""<div class='notice-box'><b>📢 필독 공지:</b> {current_noti
 
 tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["🏠 데일리 홈", "🔍 전국 당근검색", "⏰ 직원 출퇴근", "🔥 화재보험 점검", "📻 힐링 라디오", "📒 사장님 장부"])
 
-# ... (Tab 1 ~ 4 생략, 위와 동일) ...
+# ... (나머지 탭 코드는 이전과 동일합니다) ...
 with tab1:
     st.subheader("📰 오늘의 사장님 필수 뉴스")
     st.caption("※ 매일 09시, 12시, 18시, 21시 자동 업데이트")
@@ -356,25 +368,15 @@ with tab4:
                 else: st.error(m)
             else: st.warning("정보를 입력하세요.")
 
-# =============================================================================
-# [TAB 5] 📻 힐링 라디오 (사장님 유튜브 연동)
-# =============================================================================
 with tab5:
     st.header("📻 사장님 힐링 라디오")
     st.caption("오늘도 수고 많으셨습니다. 노래 들으면서 힘내세요! 💪")
-    
-    # 1. 저장된 URL 불러오기 (없으면 기본 재즈 라디오)
     current_radio_url = load_radio_url()
-    
-    # 2. 영상 재생
     try:
         st.video(current_radio_url)
     except:
         st.error("영상을 재생할 수 없습니다.")
-        
     st.info("💡 위 영상은 **유튜브 조회수**에 그대로 반영됩니다!")
-
-    # 3. 관리자 전용: URL 변경 기능
     if st.session_state.store_name in ["admin", "관리자"]:
         st.markdown("---")
         with st.expander("🛠️ [관리자] 방송 영상 바꾸기"):
@@ -385,9 +387,6 @@ with tab5:
                 st.success("방송이 변경되었습니다! 모든 사장님들에게 이 영상이 송출됩니다.")
                 st.rerun()
 
-# =============================================================================
-# [TAB 6] 📒 사장님 장부 (기존 유지)
-# =============================================================================
 with tab6:
     st.header("📒 사장님 간편 장부")
     st.caption("복잡한 기능은 뺐습니다. **입력하고, 조회하고, 엑셀로 받으세요.**")
