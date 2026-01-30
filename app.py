@@ -9,9 +9,10 @@ from datetime import datetime, timedelta
 import smtplib
 from email.mime.text import MIMEText
 import os
+import streamlit.components.v1 as components # 테트리스용
 
 # -----------------------------------------------------------------------------
-# [0] 페이지 설정 및 관리자 비밀번호 설정
+# [0] 페이지 설정 및 관리자 비밀번호
 # -----------------------------------------------------------------------------
 st.set_page_config(
     page_title="사장님 비서",
@@ -20,7 +21,7 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# 🔐 [중요] 관리자 전용 비밀번호 (사장님만 아는 번호로 바꾸세요!)
+# 🔐 관리자 비밀번호
 ADMIN_PW = "7777" 
 
 # -----------------------------------------------------------------------------
@@ -61,6 +62,15 @@ def set_style():
         .ledger-summary { background-color: white; padding: 15px; border-radius: 10px; border: 1px solid #ddd; text-align: center; }
         .ledger-val { font-size: 1.3rem; font-weight: bold; color: #333; }
         .ledger-label { font-size: 0.9rem; color: #666; }
+        
+        /* 🎮 랭킹 스타일 */
+        .rank-card {
+            background-color: #fff; border: 2px solid #ff6f0f; border-radius: 10px; padding: 10px; margin-bottom: 5px;
+            display: flex; justify-content: space-between; align-items: center;
+        }
+        .rank-medal { font-size: 1.5rem; margin-right: 10px; }
+        .rank-name { font-weight: bold; color: #333; }
+        .rank-score { font-weight: bold; color: #ff6f0f; }
         </style>
     """, unsafe_allow_html=True)
 
@@ -165,7 +175,6 @@ def load_radio_url():
         with open(RADIO_URL_FILE, "r", encoding="utf-8") as f:
             return f.read().strip()
     return "https://www.youtube.com/watch?v=5qap5aO4i9A"
-
 def save_radio_url(url):
     with open(RADIO_URL_FILE, "w", encoding="utf-8") as f:
         f.write(url)
@@ -197,6 +206,25 @@ def save_attendance(name, action):
     df.to_csv(get_csv_filename(), index=False)
     return df
 
+# 게임 랭킹
+GAME_FILE = "game_rank.csv"
+def load_rank():
+    if os.path.exists(GAME_FILE): return pd.read_csv(GAME_FILE)
+    return pd.DataFrame(columns=["name", "score", "date"])
+
+def save_score(name, score):
+    df = load_rank()
+    if name in df['name'].values:
+        idx = df.index[df['name'] == name].tolist()[0]
+        if score > df.at[idx, 'score']:
+            df.at[idx, 'score'] = score
+            df.at[idx, 'date'] = datetime.now().strftime("%Y-%m-%d")
+    else:
+        new_row = {"name": name, "score": score, "date": datetime.now().strftime("%Y-%m-%d")}
+        df = pd.concat([pd.DataFrame([new_row]), df], ignore_index=True)
+    df.to_csv(GAME_FILE, index=False)
+    return df
+
 # -----------------------------------------------------------------------------
 # [메인] 앱 실행
 # -----------------------------------------------------------------------------
@@ -212,34 +240,24 @@ if not st.session_state.logged_in:
     st.markdown("<br><br>", unsafe_allow_html=True)
     c1, c2, c3 = st.columns([1, 2, 1])
     with c2:
-        # 사장님 로고 URL
         LOGO_URL = "https://cdn-icons-png.flaticon.com/512/1995/1995515.png" 
         st.markdown(f"""<div class='login-box'><img src='{LOGO_URL}' style='width: 150px; margin-bottom: 20px; border-radius: 20px;'><p style='font-size: 1.1rem; font-weight: bold; color: #555;'>로그인</p></div>""", unsafe_allow_html=True)
         with st.expander("📲 카톡에서 들어오셨나요?"):
             st.markdown("**우측 하단 점 3개 → [다른 브라우저로 열기]**")
-            
-        # 🔑 [보안 패치] 관리자 힌트 제거
         store_input = st.text_input("매장 이름")
         pw_input = st.text_input("비밀번호 (4자리)", type="password")
-        
         if st.button("입장하기"):
-            # 1. 관리자 로그인 시도 (ID가 admin 또는 관리자인 경우)
             if store_input in ["admin", "관리자"]:
-                if pw_input == ADMIN_PW: # 비밀번호 일치 확인
+                if pw_input == ADMIN_PW:
                     st.session_state.logged_in = True
                     st.session_state.store_name = store_input
                     st.rerun()
-                else:
-                    st.error("❌ 관리자 비밀번호가 틀렸습니다.")
-            
-            # 2. 일반 사장님 로그인 시도
+                else: st.error("❌ 관리자 비밀번호가 틀렸습니다.")
             elif store_input and pw_input:
                 st.session_state.logged_in = True
                 st.session_state.store_name = store_input
                 st.rerun()
-            else:
-                st.warning("정보를 입력해주세요.")
-                
+            else: st.warning("정보를 입력해주세요.")
     st.markdown(f"<div style='text-align:center; color:#888; margin-top:20px;'>👀 현재 <b>{total_visitors:,}명</b>의 사장님이 함께하고 계십니다.</div>", unsafe_allow_html=True)
     st.stop()
 
@@ -270,9 +288,9 @@ if st.session_state.store_name in ["admin", "관리자"]:
 
 st.markdown(f"""<div class='notice-box'><b>📢 필독 공지:</b> {current_notice}</div>""", unsafe_allow_html=True)
 
-tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["🏠 데일리 홈", "🔍 전국 당근검색", "⏰ 직원 출퇴근", "🔥 화재보험 점검", "📻 힐링 라디오", "📒 사장님 장부"])
+tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs(["🏠 데일리 홈", "🔍 전국 당근검색", "⏰ 직원 출퇴근", "🔥 화재보험 점검", "📻 힐링 라디오", "📒 사장님 장부", "💰 정책자금 & 쉼터"])
 
-# ... (나머지 탭 코드는 이전과 동일합니다) ...
+# ... (Tab 1 ~ 6 기존 코드 유지) ...
 with tab1:
     st.subheader("📰 오늘의 사장님 필수 뉴스")
     st.caption("※ 매일 09시, 12시, 18시, 21시 자동 업데이트")
@@ -356,6 +374,7 @@ with tab4:
         if liab_check == "아니요 / 잘 모르겠습니다.": st.markdown("""<div style='background-color:#fff3cd; padding:20px; border-radius:10px; border:2px solid red; margin-top:20px;'><h3 style='color:red;'>🚨 [긴급 경고] 배상책임 미가입 위험!</h3><b>손님이 매장에서 다치면 큰일 납니다.</b> 즉시 확인이 필요합니다.</div>""", unsafe_allow_html=True)
     st.markdown("---")
     with st.form("starbucks_form_fire"):
+        st.info("💡 **기본 상담은 카카오톡으로 진행**되며, **대면 상담은 희망하실 때만** 방문합니다. 부담 없이 신청하세요! (대면미팅 권유 X)")
         c1, c2 = st.columns(2)
         name = c1.text_input("성명")
         phone = c2.text_input("연락처")
@@ -390,7 +409,6 @@ with tab5:
 with tab6:
     st.header("📒 사장님 간편 장부")
     st.caption("복잡한 기능은 뺐습니다. **입력하고, 조회하고, 엑셀로 받으세요.**")
-    
     with st.expander("✏️ 수입/지출 입력하기 (클릭)", expanded=False):
         with st.form("ledger_input"):
             c1, c2 = st.columns(2)
@@ -405,7 +423,6 @@ with tab6:
                     save_ledger(l_date, l_type, l_item, l_amount, l_memo)
                     st.success("저장되었습니다."); st.rerun()
                 else: st.warning("항목과 금액을 확인해주세요.")
-    
     st.markdown("---")
     st.subheader("🔍 장부 조회 & 엑셀 다운로드")
     df_ledger = load_ledger()
@@ -414,18 +431,265 @@ with tab6:
         search_txt = c1.text_input("검색어 (항목, 메모)", placeholder="예: 식자재")
         mask = df_ledger.apply(lambda x: search_txt in str(x['항목']) or search_txt in str(x['메모']), axis=1)
         df_filtered = df_ledger[mask]
-        
         total_income = df_filtered[df_filtered['구분'] == "매출 (수입)"]['금액'].sum()
         total_expense = df_filtered[df_filtered['구분'] == "지출 (비용)"]['금액'].sum()
         net_profit = total_income - total_expense
-        
         c_a, c_b, c_c = st.columns(3)
         c_a.markdown(f"<div class='ledger-summary'><div class='ledger-label'>총 매출</div><div class='ledger-val' style='color:blue;'>{total_income:,}원</div></div>", unsafe_allow_html=True)
         c_b.markdown(f"<div class='ledger-summary'><div class='ledger-label'>총 지출</div><div class='ledger-val' style='color:red;'>{total_expense:,}원</div></div>", unsafe_allow_html=True)
         c_c.markdown(f"<div class='ledger-summary'><div class='ledger-label'>순이익</div><div class='ledger-val'>{net_profit:,}원</div></div>", unsafe_allow_html=True)
-        
         st.markdown("<br>", unsafe_allow_html=True)
         st.dataframe(df_filtered, use_container_width=True, hide_index=True)
         csv = df_filtered.to_csv(index=False).encode('utf-8-sig')
         st.download_button(label="📥 엑셀(CSV)로 내보내기", data=csv, file_name=f"사장님장부_{datetime.now().strftime('%Y%m%d')}.csv", mime='text/csv')
     else: st.info("작성된 장부가 없습니다.")
+
+# =============================================================================
+# [TAB 7] 💰 정책자금 & 쉼터 (테트리스 탑재)
+# =============================================================================
+with tab7:
+    # 1. 소상공인 정책자금 안내 (URL 연동)
+    st.header("💰 소상공인 정책자금 센터")
+    st.markdown("""
+    <div style='background-color:#e8f5e9; padding:20px; border-radius:15px; border:2px solid #4caf50; text-align:center;'>
+        <h3 style='color:#2e7d32; margin-bottom:10px;'>🏛️ 정책자금/대출 공식 신청 사이트</h3>
+        <p style='color:#333; margin-bottom:15px;'>
+            소상공인시장진흥공단에서 제공하는 <b>저금리 정책자금, 대리대출</b>을 확인하세요.<br>
+            자영업자에게 가장 믿을 수 있고 필요한 정보입니다.
+        </p>
+        <a href='https://ols.semas.or.kr/ols/man/SMAN010M/page.do' target='_blank' 
+           style='background-color:#4caf50; color:white; padding:12px 25px; border-radius:30px; text-decoration:none; font-weight:bold; font-size:1.1rem; box-shadow: 0 4px 6px rgba(0,0,0,0.1);'>
+           🚀 정책자금 신청하러 가기 (클릭)
+        </a>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    st.markdown("---")
+    
+    # 2. 테트리스 게임 (HTML 임베딩)
+    st.header("🎮 테트리스 챔피언십")
+    st.caption("키보드 방향키(PC) 또는 화면 버튼(모바일)으로 즐기세요!")
+    
+    # 테트리스 HTML/JS 코드
+    tetris_code = """
+    <!DOCTYPE html>
+    <html>
+    <head>
+    <style>
+        body { background-color: #202028; color: #fff; font-family: sans-serif; text-align: center; }
+        #tetris { margin: 0 auto; display: block; background-color: #000; border: 2px solid #333; }
+        .score-box { font-size: 20px; margin-bottom: 10px; color: #ff6f0f; font-weight: bold; }
+        .controls { margin-top: 15px; display: none; } /* 모바일에서만 보이게 할 수도 있음 */
+        button { padding: 10px 20px; font-size: 16px; margin: 5px; border-radius: 5px; border: none; background: #444; color: white; cursor: pointer; }
+        button:active { background: #666; }
+    </style>
+    </head>
+    <body>
+        <div class="score-box">SCORE: <span id="score">0</span></div>
+        <canvas id="tetris" width="240" height="400"></canvas>
+        <div style="margin-top:10px; color:#aaa; font-size:12px;">PC: 방향키(←,→,↓), 회전(↑)</div>
+        
+        <script>
+        const canvas = document.getElementById('tetris');
+        const context = canvas.getContext('2d');
+        context.scale(20, 20);
+
+        function arenaSweep() {
+            let rowCount = 1;
+            outer: for (let y = arena.length -1; y > 0; --y) {
+                for (let x = 0; x < arena[y].length; ++x) {
+                    if (arena[y][x] === 0) {
+                        continue outer;
+                    }
+                }
+                const row = arena.splice(y, 1)[0].fill(0);
+                arena.unshift(row);
+                ++y;
+                player.score += rowCount * 10;
+                rowCount *= 2;
+            }
+        }
+
+        function collide(arena, player) {
+            const m = player.matrix;
+            const o = player.pos;
+            for (let y = 0; y < m.length; ++y) {
+                for (let x = 0; x < m[y].length; ++x) {
+                    if (m[y][x] !== 0 && (arena[y + o.y] && arena[y + o.y][x + o.x]) !== 0) {
+                        return true;
+                    }
+                }
+            }
+            return false;
+        }
+
+        function createMatrix(w, h) {
+            const matrix = [];
+            while (h--) { matrix.push(new Array(w).fill(0)); }
+            return matrix;
+        }
+
+        function createPiece(type) {
+            if (type === 'I') return [[0, 1, 0, 0], [0, 1, 0, 0], [0, 1, 0, 0], [0, 1, 0, 0]];
+            else if (type === 'L') return [[0, 2, 0], [0, 2, 0], [0, 2, 2]];
+            else if (type === 'J') return [[0, 3, 0], [0, 3, 0], [3, 3, 0]];
+            else if (type === 'O') return [[4, 4], [4, 4]];
+            else if (type === 'Z') return [[5, 5, 0], [0, 5, 5], [0, 0, 0]];
+            else if (type === 'S') return [[0, 6, 6], [6, 6, 0], [0, 0, 0]];
+            else if (type === 'T') return [[0, 7, 0], [7, 7, 7], [0, 0, 0]];
+        }
+
+        function drawMatrix(matrix, offset) {
+            matrix.forEach((row, y) => {
+                row.forEach((value, x) => {
+                    if (value !== 0) {
+                        context.fillStyle = ['null', '#FF0D72', '#0DC2FF', '#0DFF72', '#F538FF', '#FF8E0D', '#FFE138', '#3877FF'][value];
+                        context.fillRect(x + offset.x, y + offset.y, 1, 1);
+                    }
+                });
+            });
+        }
+
+        function draw() {
+            context.fillStyle = '#000';
+            context.fillRect(0, 0, canvas.width, canvas.height);
+            drawMatrix(arena, {x: 0, y: 0});
+            drawMatrix(player.matrix, player.pos);
+        }
+
+        function merge(arena, player) {
+            player.matrix.forEach((row, y) => {
+                row.forEach((value, x) => {
+                    if (value !== 0) {
+                        arena[y + player.pos.y][x + player.pos.x] = value;
+                    }
+                });
+            });
+        }
+
+        function rotate(matrix, dir) {
+            for (let y = 0; y < matrix.length; ++y) {
+                for (let x = 0; x < y; ++x) {
+                    [matrix[x][y], matrix[y][x]] = [matrix[y][x], matrix[x][y]];
+                }
+            }
+            if (dir > 0) matrix.forEach(row => row.reverse());
+            else matrix.reverse();
+        }
+
+        function playerDrop() {
+            player.pos.y++;
+            if (collide(arena, player)) {
+                player.pos.y--;
+                merge(arena, player);
+                playerReset();
+                arenaSweep();
+                updateScore();
+            }
+            dropCounter = 0;
+        }
+
+        function playerMove(offset) {
+            player.pos.x += offset;
+            if (collide(arena, player)) {
+                player.pos.x -= offset;
+            }
+        }
+
+        function playerReset() {
+            const pieces = 'ILJOTSZ';
+            player.matrix = createPiece(pieces[pieces.length * Math.random() | 0]);
+            player.pos.y = 0;
+            player.pos.x = (arena[0].length / 2 | 0) - (player.matrix[0].length / 2 | 0);
+            if (collide(arena, player)) {
+                arena.forEach(row => row.fill(0));
+                player.score = 0;
+                updateScore();
+            }
+        }
+
+        function playerRotate(dir) {
+            const pos = player.pos.x;
+            let offset = 1;
+            rotate(player.matrix, dir);
+            while (collide(arena, player)) {
+                player.pos.x += offset;
+                offset = -(offset + (offset > 0 ? 1 : -1));
+                if (offset > player.matrix[0].length) {
+                    rotate(player.matrix, -dir);
+                    player.pos.x = pos;
+                    return;
+                }
+            }
+        }
+
+        let dropCounter = 0;
+        let dropInterval = 1000;
+        let lastTime = 0;
+
+        function update(time = 0) {
+            const deltaTime = time - lastTime;
+            lastTime = time;
+            dropCounter += deltaTime;
+            if (dropCounter > dropInterval) {
+                playerDrop();
+            }
+            draw();
+            requestAnimationFrame(update);
+        }
+
+        function updateScore() {
+            document.getElementById('score').innerText = player.score;
+        }
+
+        const arena = createMatrix(12, 20);
+        const player = { pos: {x: 0, y: 0}, matrix: null, score: 0 };
+
+        document.addEventListener('keydown', event => {
+            if (event.keyCode === 37) playerMove(-1);
+            else if (event.keyCode === 39) playerMove(1);
+            else if (event.keyCode === 40) playerDrop();
+            else if (event.keyCode === 38) playerRotate(1);
+        });
+
+        playerReset();
+        updateScore();
+        update();
+        </script>
+    </body>
+    </html>
+    """
+    
+    # 테트리스 화면 표시 (높이 600px)
+    components.html(tetris_code, height=600)
+    
+    # 점수 등록 & 랭킹 (파이썬 로직)
+    st.markdown("---")
+    st.subheader("🏆 테트리스 랭킹 도전")
+    
+    c1, c2 = st.columns([1, 1])
+    with c1:
+        with st.form("game_score_submit"):
+            st.write("게임이 끝나면 점수를 입력해주세요!")
+            my_score = st.number_input("내 점수 (정직하게 입력!)", min_value=0, step=10)
+            if st.form_submit_button("랭킹 등록"):
+                if my_score > 0:
+                    save_score(st.session_state.store_name, my_score)
+                    st.success(f"{my_score}점 등록 완료!")
+                    st.rerun()
+    
+    with c2:
+        st.markdown("##### 🏅 명예의 전당 (Top 5)")
+        df_rank = load_rank()
+        if not df_rank.empty:
+            df_rank = df_rank.sort_values(by='score', ascending=False).head(5).reset_index(drop=True)
+            for i, row in df_rank.iterrows():
+                medal = "🥇" if i == 0 else "🥈" if i == 1 else "🥉" if i == 2 else f"{i+1}위"
+                st.markdown(f"""
+                <div class='rank-card'>
+                    <div><span class='rank-medal'>{medal}</span> <span class='rank-name'>{row['name']}</span></div>
+                    <div class='rank-score'>{row['score']:,} 점</div>
+                </div>
+                """, unsafe_allow_html=True)
+        else:
+            st.info("아직 랭커가 없습니다. 1등을 노리세요!")
