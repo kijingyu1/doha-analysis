@@ -445,7 +445,7 @@ with tab6:
     else: st.info("작성된 장부가 없습니다.")
 
 # =============================================================================
-# [TAB 7] 💰 정책자금 & 쉼터 (테트리스 탑재)
+# [TAB 7] 💰 정책자금 & 쉼터 (테트리스 모바일 에디션)
 # =============================================================================
 with tab7:
     # 1. 소상공인 정책자금 안내 (URL 연동)
@@ -454,8 +454,7 @@ with tab7:
     <div style='background-color:#e8f5e9; padding:20px; border-radius:15px; border:2px solid #4caf50; text-align:center;'>
         <h3 style='color:#2e7d32; margin-bottom:10px;'>🏛️ 정책자금/대출 공식 신청 사이트</h3>
         <p style='color:#333; margin-bottom:15px;'>
-            소상공인시장진흥공단에서 제공하는 <b>저금리 정책자금, 대리대출</b>을 확인하세요.<br>
-            자영업자에게 가장 믿을 수 있고 필요한 정보입니다.
+            소상공인시장진흥공단에서 제공하는 <b>저금리 정책자금</b>을 확인하세요.
         </p>
         <a href='https://ols.semas.or.kr/ols/man/SMAN010M/page.do' target='_blank' 
            style='background-color:#4caf50; color:white; padding:12px 25px; border-radius:30px; text-decoration:none; font-weight:bold; font-size:1.1rem; box-shadow: 0 4px 6px rgba(0,0,0,0.1);'>
@@ -466,41 +465,100 @@ with tab7:
     
     st.markdown("---")
     
-    # 2. 테트리스 게임 (HTML 임베딩)
-    st.header("🎮 테트리스 챔피언십")
-    st.caption("키보드 방향키(PC) 또는 화면 버튼(모바일)으로 즐기세요!")
-    
-    # 테트리스 HTML/JS 코드
+    # 2. 테트리스 게임 (모바일 최적화 Ver.)
+    st.header("🎮 테트리스 챔피언십 (모바일용)")
+    st.caption("레벨 20까지 도전하세요! 500점마다 속도가 빨라집니다.")
+
+    # 테트리스 HTML/JS 코드 (모바일 컨트롤러 + 레벨 시스템 탑재)
     tetris_code = """
     <!DOCTYPE html>
     <html>
     <head>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <style>
-        body { background-color: #202028; color: #fff; font-family: sans-serif; text-align: center; }
-        #tetris { margin: 0 auto; display: block; background-color: #000; border: 2px solid #333; }
-        .score-box { font-size: 20px; margin-bottom: 10px; color: #ff6f0f; font-weight: bold; }
-        .controls { margin-top: 15px; display: none; } /* 모바일에서만 보이게 할 수도 있음 */
-        button { padding: 10px 20px; font-size: 16px; margin: 5px; border-radius: 5px; border: none; background: #444; color: white; cursor: pointer; }
-        button:active { background: #666; }
+        body { background-color: #202028; color: #fff; font-family: 'Courier New', Courier, monospace; text-align: center; margin: 0; padding: 0; touch-action: manipulation; }
+        
+        /* 게임 컨테이너 */
+        #game-container { position: relative; width: 100%; max-width: 350px; margin: 0 auto; }
+        
+        /* 점수 및 레벨 보드 */
+        .hud { display: flex; justify-content: space-between; padding: 10px; font-weight: bold; font-size: 18px; color: #ff6f0f; }
+        
+        /* 캔버스 (게임 화면) - 크기 2배 확대 효과 */
+        canvas { display: block; background-color: #000; border: 4px solid #444; margin: 0 auto; box-shadow: 0 0 20px rgba(0,0,0,0.5); width: 100%; height: auto; image-rendering: pixelated; }
+        
+        /* 시작/종료 오버레이 */
+        #overlay {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            background: rgba(0, 0, 0, 0.85); width: 80%; padding: 20px; border-radius: 10px; border: 2px solid #ff6f0f;
+            display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 10;
+        }
+        .btn-start {
+            background: #ff6f0f; color: white; border: none; padding: 15px 30px; font-size: 20px; font-weight: bold; border-radius: 50px; cursor: pointer; margin-top: 10px;
+            box-shadow: 0 4px 0 #b34e0a;
+        }
+        .btn-start:active { transform: translateY(4px); box-shadow: none; }
+        
+        /* 모바일 컨트롤러 */
+        .controls-area { margin-top: 15px; display: flex; flex-direction: column; align-items: center; gap: 10px; padding-bottom: 20px; }
+        .d-pad { display: flex; gap: 10px; }
+        .ctrl-btn {
+            width: 70px; height: 70px; background: #444; border-radius: 15px; border: none;
+            color: white; font-size: 30px; display: flex; align-items: center; justify-content: center;
+            box-shadow: 0 4px 0 #222; touch-action: manipulation; -webkit-tap-highlight-color: transparent;
+        }
+        .ctrl-btn:active { background: #666; transform: translateY(4px); box-shadow: none; }
+        .rotate-btn { background: #2e7d32; width: 80px; height: 80px; border-radius: 50%; }
+        
+        .hidden { display: none !important; }
     </style>
     </head>
     <body>
-        <div class="score-box">SCORE: <span id="score">0</span></div>
-        <canvas id="tetris" width="240" height="400"></canvas>
-        <div style="margin-top:10px; color:#aaa; font-size:12px;">PC: 방향키(←,→,↓), 회전(↑)</div>
+        <div id="game-container">
+            <div class="hud">
+                <span>LV: <span id="level">1</span></span>
+                <span>SCORE: <span id="score">0</span></span>
+            </div>
+            
+            <canvas id="tetris" width="240" height="400"></canvas>
+            
+            <div id="overlay">
+                <h2 id="msg-title" style="margin:0 0 10px 0; color:#fff;">TETRIS</h2>
+                <p id="msg-sub" style="color:#aaa;">사장님, 준비되셨나요?</p>
+                <div id="final-score-display" style="display:none; font-size:24px; color:#ff6f0f; margin:10px 0; font-weight:bold;">0점</div>
+                <button class="btn-start" onclick="startGame()">GAME START</button>
+            </div>
+        </div>
+
+        <div class="controls-area">
+            <button class="ctrl-btn rotate-btn" ontouchstart="playerRotate(1); return false;" onmousedown="playerRotate(1)">↻</button>
+            
+            <div class="d-pad">
+                <button class="ctrl-btn" ontouchstart="playerMove(-1); return false;" onmousedown="playerMove(-1)">⬅️</button>
+                <button class="ctrl-btn" ontouchstart="playerDrop(); return false;" onmousedown="playerDrop()">⬇️</button>
+                <button class="ctrl-btn" ontouchstart="playerMove(1); return false;" onmousedown="playerMove(1)">➡️</button>
+            </div>
+            <div style="font-size:12px; color:#666; margin-top:5px;">(PC는 방향키 사용 가능)</div>
+        </div>
         
         <script>
         const canvas = document.getElementById('tetris');
         const context = canvas.getContext('2d');
         context.scale(20, 20);
 
+        let isGameOver = false;
+        let isPaused = true;
+        let dropInterval = 1000;
+        let lastTime = 0;
+        let dropCounter = 0;
+        let level = 1;
+
+        // --- 게임 로직 ---
         function arenaSweep() {
             let rowCount = 1;
             outer: for (let y = arena.length -1; y > 0; --y) {
                 for (let x = 0; x < arena[y].length; ++x) {
-                    if (arena[y][x] === 0) {
-                        continue outer;
-                    }
+                    if (arena[y][x] === 0) continue outer;
                 }
                 const row = arena.splice(y, 1)[0].fill(0);
                 arena.unshift(row);
@@ -508,6 +566,19 @@ with tab7:
                 player.score += rowCount * 10;
                 rowCount *= 2;
             }
+            updateLevel(); // 점수 오르면 레벨 체크
+        }
+
+        function updateLevel() {
+            // 500점마다 레벨업 (최대 20레벨)
+            const newLevel = Math.min(20, Math.floor(player.score / 500) + 1);
+            if (newLevel !== level) {
+                level = newLevel;
+                // 레벨당 속도 빨라짐 (최소 100ms)
+                dropInterval = Math.max(100, 1000 - (level - 1) * 45); 
+            }
+            document.getElementById('level').innerText = level;
+            document.getElementById('score').innerText = player.score;
         }
 
         function collide(arena, player) {
@@ -543,8 +614,15 @@ with tab7:
             matrix.forEach((row, y) => {
                 row.forEach((value, x) => {
                     if (value !== 0) {
-                        context.fillStyle = ['null', '#FF0D72', '#0DC2FF', '#0DFF72', '#F538FF', '#FF8E0D', '#FFE138', '#3877FF'][value];
+                        // 화려한 색상 팔레트
+                        const colors = [null, '#FF0D72', '#0DC2FF', '#0DFF72', '#F538FF', '#FF8E0D', '#FFE138', '#3877FF'];
+                        context.fillStyle = colors[value];
                         context.fillRect(x + offset.x, y + offset.y, 1, 1);
+                        
+                        // 블럭 입체감
+                        context.lineWidth = 0.05;
+                        context.strokeStyle = 'white';
+                        context.strokeRect(x + offset.x, y + offset.y, 1, 1);
                     }
                 });
             });
@@ -578,18 +656,19 @@ with tab7:
         }
 
         function playerDrop() {
+            if (isPaused || isGameOver) return;
             player.pos.y++;
             if (collide(arena, player)) {
                 player.pos.y--;
                 merge(arena, player);
                 playerReset();
                 arenaSweep();
-                updateScore();
             }
             dropCounter = 0;
         }
 
         function playerMove(offset) {
+            if (isPaused || isGameOver) return;
             player.pos.x += offset;
             if (collide(arena, player)) {
                 player.pos.x -= offset;
@@ -601,14 +680,14 @@ with tab7:
             player.matrix = createPiece(pieces[pieces.length * Math.random() | 0]);
             player.pos.y = 0;
             player.pos.x = (arena[0].length / 2 | 0) - (player.matrix[0].length / 2 | 0);
+            
             if (collide(arena, player)) {
-                arena.forEach(row => row.fill(0));
-                player.score = 0;
-                updateScore();
+                gameOver();
             }
         }
 
         function playerRotate(dir) {
+            if (isPaused || isGameOver) return;
             const pos = player.pos.x;
             let offset = 1;
             rotate(player.matrix, dir);
@@ -623,59 +702,87 @@ with tab7:
             }
         }
 
-        let dropCounter = 0;
-        let dropInterval = 1000;
-        let lastTime = 0;
-
         function update(time = 0) {
-            const deltaTime = time - lastTime;
-            lastTime = time;
-            dropCounter += deltaTime;
-            if (dropCounter > dropInterval) {
-                playerDrop();
+            if (!isPaused && !isGameOver) {
+                const deltaTime = time - lastTime;
+                lastTime = time;
+                dropCounter += deltaTime;
+                if (dropCounter > dropInterval) {
+                    playerDrop();
+                }
+                draw();
             }
-            draw();
             requestAnimationFrame(update);
         }
 
-        function updateScore() {
-            document.getElementById('score').innerText = player.score;
+        // --- 게임 제어 ---
+        function startGame() {
+            // 초기화
+            arena.forEach(row => row.fill(0));
+            player.score = 0;
+            level = 1;
+            dropInterval = 1000;
+            isGameOver = false;
+            isPaused = false;
+            
+            updateLevel();
+            playerReset();
+            
+            // UI 숨김
+            document.getElementById('overlay').classList.add('hidden');
+            update();
+        }
+
+        function gameOver() {
+            isGameOver = true;
+            document.getElementById('overlay').classList.remove('hidden');
+            document.getElementById('msg-title').innerText = "GAME OVER";
+            document.getElementById('msg-sub').innerText = "사장님의 최종 점수는?";
+            
+            const scoreEl = document.getElementById('final-score-display');
+            scoreEl.style.display = "block";
+            scoreEl.innerText = player.score + " 점";
+            
+            document.querySelector('.btn-start').innerText = "다시 시작하기";
         }
 
         const arena = createMatrix(12, 20);
         const player = { pos: {x: 0, y: 0}, matrix: null, score: 0 };
 
+        // 키보드 이벤트 (PC용)
         document.addEventListener('keydown', event => {
             if (event.keyCode === 37) playerMove(-1);
             else if (event.keyCode === 39) playerMove(1);
             else if (event.keyCode === 40) playerDrop();
             else if (event.keyCode === 38) playerRotate(1);
         });
-
+        
+        // 초기 화면 그리기
         playerReset();
-        updateScore();
-        update();
+        updateLevel();
+        draw();
         </script>
     </body>
     </html>
     """
     
-    # 테트리스 화면 표시 (높이 600px)
-    components.html(tetris_code, height=600)
+    # 3. 게임 화면 표시 (높이 넉넉하게 850px)
+    components.html(tetris_code, height=850)
     
-    # 점수 등록 & 랭킹 (파이썬 로직)
+    # 4. 점수 등록 & 랭킹 (UI 개선)
     st.markdown("---")
-    st.subheader("🏆 테트리스 랭킹 도전")
+    st.subheader("🏆 랭킹 등록하기")
     
     c1, c2 = st.columns([1, 1])
     with c1:
+        st.info("👆 위 게임이 끝나면 **'GAME OVER'** 화면에 나온 점수를 아래에 입력해주세요.")
         with st.form("game_score_submit"):
-            st.write("게임이 끝나면 점수를 입력해주세요!")
-            my_score = st.number_input("내 점수 (정직하게 입력!)", min_value=0, step=10)
-            if st.form_submit_button("랭킹 등록"):
+            my_score = st.number_input("내 최종 점수", min_value=0, step=100)
+            if st.form_submit_button("🥇 점수 등록 및 랭킹 확인"):
                 if my_score > 0:
                     save_score(st.session_state.store_name, my_score)
-                    st.success(f"{my_score}점 등록 완료!")
+                    st.success(f"축하합니다! {my_score}점 등록 완료!")
+                    st.balloons()
                     st.rerun()
     
     with c2:
