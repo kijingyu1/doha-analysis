@@ -25,52 +25,56 @@ st.set_page_config(
 ADMIN_PW = "7777" 
 
 # -----------------------------------------------------------------------------
-# [기능 1] 스타일
+# [기능 1] 스타일 및 하단 고정 버튼 (Sticky Footer)
 # -----------------------------------------------------------------------------
 def set_style():
     st.markdown("""
         <style>
+        /* 기존 스타일 유지 */
         .main { background-color: #f8f9fa; }
         h1 { color: #ff6f0f; font-weight: 800; line-height: 1.2; }
-        .store-subtitle { color: #333; font-size: 1.5rem; font-weight: bold; margin-top: 5px; }
-        h2, h3 { color: #ff6f0f; font-weight: 800; } 
         
-        .finance-box { background-color: white; padding: 10px; border-radius: 10px; box-shadow: 1px 1px 3px rgba(0,0,0,0.1); text-align: center; margin-bottom: 8px; }
-        .finance-title { font-size: 0.8rem; color: #666; font-weight: bold; }
-        .finance-val { font-size: 1.1rem; font-weight: bold; color: #333; }
-        .finance-change { font-size: 0.8rem; font-weight: bold; }
-        
-        .news-box { background-color: white; padding: 15px; border-radius: 10px; border-left: 5px solid #ff6f0f; margin-bottom: 20px; }
-        .news-item { padding: 8px 0; border-bottom: 1px solid #eee; }
-        .news-item a { text-decoration: none; color: #333; font-weight: bold; font-size: 1rem; }
-        .news-date { font-size: 0.8rem; color: #ff6f0f; margin-left: 5px; }
-        .news-update-time { font-size: 0.8rem; color: #888; text-align: right; margin-top: 5px; }
-        
-        .stButton>button { background-color: #ff6f0f; color: white; border-radius: 8px; font-weight: bold; width: 100%; height: 45px; border: none; }
-        .stButton>button:hover { background-color: #e65c00; }
-        
-        .event-box { background-color: #1e3932; color: white; padding: 15px; border-radius: 10px; text-align: center; margin-bottom: 20px; }
-        .fire-info-box { background-color: #fff3cd; padding: 20px; border-radius: 10px; border: 2px solid #ffc107; text-align: center; margin-bottom: 20px; }
-        .fire-emoji { font-size: 3rem; }
-        
-        .login-box { max-width: 400px; margin: 0 auto; padding: 40px; background-color: white; border-radius: 20px; text-align: center; box-shadow: 0px 4px 15px rgba(0,0,0,0.1); }
-        .install-guide { background-color: #e3f2fd; padding: 15px; border-radius: 10px; border: 1px solid #90caf9; margin-bottom: 15px; color: #0d47a1; font-size: 0.9rem; }
-        .visitor-badge { background-color: #333; color: #00ff00; padding: 10px; border-radius: 5px; font-family: 'Courier New', monospace; text-align: center; font-weight: bold; margin-top: 20px; }
-        
-        .notice-box { background-color: #fff3cd; color: #856404; padding: 15px; border-radius: 10px; border: 1px solid #ffeeba; margin-bottom: 20px; }
-        
-        .ledger-summary { background-color: white; padding: 15px; border-radius: 10px; border: 1px solid #ddd; text-align: center; }
-        .ledger-val { font-size: 1.3rem; font-weight: bold; color: #333; }
-        .ledger-label { font-size: 0.9rem; color: #666; }
-        
-        /* 🎮 랭킹 스타일 */
-        .rank-card {
-            background-color: #fff; border: 2px solid #ff6f0f; border-radius: 10px; padding: 10px; margin-bottom: 5px;
-            display: flex; justify-content: space-between; align-items: center;
+        /* ... (중략: 기존 박스 스타일 등은 그대로 두세요) ... */
+
+        /* 👇 [NEW] 모바일 최적화 하단 고정 문의 버튼 스타일 */
+        .sticky-footer {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            background-color: white;
+            box-shadow: 0px -2px 10px rgba(0,0,0,0.1);
+            display: flex;
+            justify-content: space-around;
+            padding: 10px 5px;
+            z-index: 9999;
+            border-top: 1px solid #eee;
         }
-        .rank-medal { font-size: 1.5rem; margin-right: 10px; }
-        .rank-name { font-weight: bold; color: #333; }
-        .rank-score { font-weight: bold; color: #ff6f0f; }
+        .footer-btn {
+            flex: 1;
+            margin: 0 5px;
+            padding: 12px 0;
+            border-radius: 8px;
+            text-align: center;
+            font-weight: bold;
+            text-decoration: none;
+            font-size: 1rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .btn-call {
+            background-color: #28a745; /* 녹색 (전화) */
+            color: white !important;
+        }
+        .btn-kakao {
+            background-color: #ffe812; /* 카카오 노랑 */
+            color: #381e1f !important;
+        }
+        /* 하단 버튼에 가려지지 않게 메인 화면 여백 추가 */
+        .block-container {
+            padding-bottom: 80px; 
+        }
         </style>
     """, unsafe_allow_html=True)
 
@@ -260,6 +264,21 @@ if not st.session_state.logged_in:
             else: st.warning("정보를 입력해주세요.")
     st.markdown(f"<div style='text-align:center; color:#888; margin-top:20px;'>👀 현재 <b>{total_visitors:,}명</b>의 사장님이 함께하고 계십니다.</div>", unsafe_allow_html=True)
     st.stop()
+# 👇 [NEW] 모든 탭의 맨 마지막(코드 최하단)에 이 코드를 넣어주세요.
+# 사장님의 전화번호와 카카오톡 오픈채팅방 링크를 넣으세요.
+MY_PHONE = "010-3952-8405" 
+MY_KAKAO_LINK = "https://open.kakao.com/o/seWGDKVh" # 사장님 오픈채팅방 주소
+
+st.markdown(f"""
+    <div class='sticky-footer'>
+        <a href='tel:{MY_PHONE}' class='footer-btn btn-call'>
+            📞 전화 상담
+        </a>
+        <a href='{MY_KAKAO_LINK}' target='_blank' class='footer-btn btn-kakao'>
+            💬 카톡 문의
+        </a>
+    </div>
+""", unsafe_allow_html=True)
 
 # 메인 화면
 with st.sidebar:
