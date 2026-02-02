@@ -255,17 +255,13 @@ def save_score(name, score):
     df.to_csv(GAME_FILE, index=False)
     return df
 
-# 전문가 DB
+# 전문가 DB - [수정됨] 초기 샘플 데이터 삭제
 EXPERT_FILE = "experts.csv"
 def load_experts():
     if os.path.exists(EXPERT_FILE): return pd.read_csv(EXPERT_FILE)
-    return pd.DataFrame({
-        "category": ["인테리어", "철거/원상복구", "세무/회계", "마케팅/블로그"],
-        "name": ["김목수 디자인", "깔끔 철거", "성실 세무", "대박 마케팅"],
-        "desc": ["카페, 식당 인테리어 10년 경력", "폐업 지원금 신청까지 도와드려요", "소상공인 절세 전문", "블로그 상위노출 보장"],
-        "contact": ["010-1234-5678", "010-9876-5432", "010-1111-2222", "010-3333-4444"],
-        "location": ["서울/경기", "전국", "인천", "서울"]
-    })
+    # ⚠️ [수정] 개인정보 보호를 위해 초기 데이터는 비워둡니다.
+    return pd.DataFrame(columns=["category", "name", "desc", "contact", "location"])
+
 def save_expert(category, name, desc, contact, location):
     df = load_experts()
     new_row = {"category": category, "name": name, "desc": desc, "contact": contact, "location": location}
@@ -339,7 +335,7 @@ st.markdown(f"""<div class='notice-box'><b>📢 필독 공지:</b> {current_noti
 # 탭 설정
 tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9 = st.tabs(["🏠 홈", "🔍 당근", "⏰ 근태", "🔥 보험점검", "📻 라디오", "📒 장부", "💰 쉼터", "🛠️ 전문가", "💧 배관/누수"])
 
-# ... (Tab 1 ~ 3 기존 코드) ...
+# ... (Tab 1 ~ 7 기존 코드) ...
 with tab1:
     st.subheader("📰 오늘의 사장님 필수 뉴스")
     st.caption("※ 매일 09시, 12시, 18시, 21시 자동 업데이트")
@@ -402,43 +398,23 @@ with tab3:
     df_log = load_attendance()
     if not df_log.empty: st.dataframe(df_log, use_container_width=True)
 
-# [TAB 4] 🔥 화재보험 점검
 with tab4:
     st.markdown("""<div class='event-box'><h3>☕ 스타벅스 100% 증정</h3><b>"상담만 받아도 조건 없이 드립니다!"</b></div>""", unsafe_allow_html=True)
-    
     st.header("🔥 사장님, 보험료 1만 원 아끼려다 1억 날립니다.")
-    st.markdown("""
-    <div class='warning-box'>
-        <div class='warning-title'>🚨 혹시 이렇게 생각하시나요?</div>
-        <div class='warning-text'>
-        "설마 우리 가게에 불이 나겠어?"<br>
-        "건물주가 보험 들었으니 괜찮겠지?"<br>
-        <br>
-        <b>절대 아닙니다.</b><br>
-        옆 가게로 불이 옮겨붙으면 <b>사장님이 100% 배상</b>해야 하고,<br>
-        손님이 매장에서 미끄러져 다쳐도 <b>사장님 책임</b>입니다.
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
-    
+    st.markdown("""<div class='warning-box'><div class='warning-title'>🚨 혹시 이렇게 생각하시나요?</div><div class='warning-text'>"설마 우리 가게에 불이 나겠어?"<br>"건물주가 보험 들었으니 괜찮겠지?"<br><br><b>절대 아닙니다.</b><br>옆 가게로 불이 옮겨붙으면 <b>사장님이 100% 배상</b>해야 하고,<br>손님이 매장에서 미끄러져 다쳐도 <b>사장님 책임</b>입니다.</div></div>""", unsafe_allow_html=True)
     st.subheader("📋 [3초 자가진단] 하나라도 해당되면 위험합니다!")
     check1 = st.checkbox("내가 가입한 화재보험에 '시설소유관리자 배상책임'이 있는지 모른다.")
     check2 = st.checkbox("보험 가입한 지 3년이 넘었는데, 한 번도 점검받은 적 없다.")
     check3 = st.checkbox("월 보험료가 5만 원 이상 나가는데, 보장 내용은 잘 모른다.")
-    
-    if check1 or check2 or check3:
-        st.error("🚨 경고: 지금 당장 '보험 증권' 확인이 필요합니다! 불필요한 돈이 새고 있거나, 정작 필요한 보장이 빠져있을 수 있습니다.")
-    
+    if check1 or check2 or check3: st.error("🚨 경고: 지금 당장 '보험 증권' 확인이 필요합니다! 불필요한 돈이 새고 있거나, 정작 필요한 보장이 빠져있을 수 있습니다.")
     st.markdown("---")
     st.subheader("🏥 무료 점검 신청 (대면 강요 X)")
-    
     with st.form("starbucks_form_fire"):
         st.info("💡 **기본 상담은 카카오톡으로 진행**되며, **대면 상담은 희망하실 때만** 방문합니다. (부담 0%)")
         c1, c2 = st.columns(2)
         name = c1.text_input("성명")
         phone = c2.text_input("연락처")
         agree = st.checkbox("(필수) 개인정보 동의")
-        
         if st.form_submit_button("📨 무료 진단받고 스타벅스 받기"):
             if agree and name and phone:
                 req_detail = f"화재보험 점검 요청 (위험체크: {check1 or check2 or check3})"
@@ -559,9 +535,6 @@ with tab8:
                     st.success("등록되었습니다!"); st.rerun()
                 else: st.warning("정보를 입력하세요.")
 
-# =============================================================================
-# [TAB 9] 💧 배관/누수 (NEW! 전문가 모드)
-# =============================================================================
 with tab9:
     st.header("💧 배관지킴이 (국가공인 배관관리사)")
     st.info("🧑‍🔧 **기도하 소장 직접 출동!** 타 업체가 못 잡은 누수, 제가 잡아드립니다.")
@@ -580,7 +553,7 @@ with tab9:
     st.markdown("<br><br>", unsafe_allow_html=True)
     st.success("✅ **국가공인 자격 보유** | ✅ **배상책임보험 가입 업체** | ✅ **카드 결제 환영**")
 
-# 👇 [하단 고정 버튼] (연락처 변수 고정됨)
+# 👇 [하단 고정 버튼]
 st.markdown(f"""
     <div class='sticky-footer'>
         <a href='tel:{MY_PHONE}' class='footer-btn btn-call'>📞 전화 상담</a>
