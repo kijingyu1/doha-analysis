@@ -12,7 +12,7 @@ import os
 import streamlit.components.v1 as components
 
 # -----------------------------------------------------------------------------
-# [0] 페이지 설정 및 관리자 비밀번호
+# [0] 페이지 설정 및 사장님 정보 (여기에 고정했습니다!)
 # -----------------------------------------------------------------------------
 st.set_page_config(
     page_title="사장님 비서",
@@ -23,6 +23,10 @@ st.set_page_config(
 
 # 🔐 관리자 비밀번호
 ADMIN_PW = "7777" 
+
+# 📞 사장님 연락처 정보 (코드에 고정됨)
+MY_PHONE = "010-3952-8405"
+MY_KAKAO_LINK = "https://open.kakao.com/o/seWGDKVh"
 
 # -----------------------------------------------------------------------------
 # [기능 1] 스타일
@@ -332,7 +336,7 @@ if st.session_state.store_name in ["admin", "관리자"]:
 
 st.markdown(f"""<div class='notice-box'><b>📢 필독 공지:</b> {current_notice}</div>""", unsafe_allow_html=True)
 
-# 탭 설정 (Tab 9 추가됨)
+# 탭 설정
 tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9 = st.tabs(["🏠 홈", "🔍 당근", "⏰ 근태", "🔥 보험점검", "📻 라디오", "📒 장부", "💰 쉼터", "🛠️ 전문가", "💧 배관/누수"])
 
 # ... (Tab 1 ~ 3 기존 코드) ...
@@ -398,9 +402,7 @@ with tab3:
     df_log = load_attendance()
     if not df_log.empty: st.dataframe(df_log, use_container_width=True)
 
-# =============================================================================
-# [TAB 4] 🔥 화재보험 점검 (매운맛 리뉴얼)
-# =============================================================================
+# [TAB 4] 🔥 화재보험 점검
 with tab4:
     st.markdown("""<div class='event-box'><h3>☕ 스타벅스 100% 증정</h3><b>"상담만 받아도 조건 없이 드립니다!"</b></div>""", unsafe_allow_html=True)
     
@@ -445,7 +447,6 @@ with tab4:
                 else: st.error(m)
             else: st.warning("정보를 입력하세요.")
 
-# ... (Tab 5 ~ 8 기존 코드) ...
 with tab5:
     st.header("📻 사장님 힐링 라디오")
     st.caption("오늘도 수고 많으셨습니다. 노래 들으면서 힘내세요! 💪")
@@ -563,39 +564,26 @@ with tab8:
 # =============================================================================
 with tab9:
     st.header("💧 배관지킴이 (국가공인 배관관리사)")
-    st.info("🧑‍🔧 **공인 배관관리사 직접 출동!** 타 업체가 못 잡은 누수, 꼭 잡아드립니다.")
-    
-    # 서비스 메뉴 (그리드)
+    st.info("🧑‍🔧 **기도하 소장 직접 출동!** 타 업체가 못 잡은 누수, 제가 잡아드립니다.")
     c1, c2, c3 = st.columns(3)
-    with c1:
-        st.markdown("""<div class='plumbing-card'><div class='plumbing-icon'>🕵️</div><div class='plumbing-title'>누수 정밀탐지</div><div class='plumbing-desc'>못 찾으면 0원!<br>최첨단 장비 보유</div></div>""", unsafe_allow_html=True)
-    with c2:
-        st.markdown("""<div class='plumbing-card'><div class='plumbing-icon'>🚿</div><div class='plumbing-title'>하수구 막힘</div><div class='plumbing-desc'>고압 세척으로<br>속 시원하게 뻥!</div></div>""", unsafe_allow_html=True)
-    with c3:
-        st.markdown("""<div class='plumbing-card'><div class='plumbing-icon'>❄️</div><div class='plumbing-title'>언 수도 녹임</div><div class='plumbing-desc'>동파 해빙 전문<br>긴급 출동</div></div>""", unsafe_allow_html=True)
-    
+    with c1: st.markdown("""<div class='plumbing-card'><div class='plumbing-icon'>🕵️</div><div class='plumbing-title'>누수 정밀탐지</div><div class='plumbing-desc'>못 찾으면 0원!<br>최첨단 장비 보유</div></div>""", unsafe_allow_html=True)
+    with c2: st.markdown("""<div class='plumbing-card'><div class='plumbing-icon'>🚿</div><div class='plumbing-title'>하수구 막힘</div><div class='plumbing-desc'>고압 세척으로<br>속 시원하게 뻥!</div></div>""", unsafe_allow_html=True)
+    with c3: st.markdown("""<div class='plumbing-card'><div class='plumbing-icon'>❄️</div><div class='plumbing-title'>언 수도 녹임</div><div class='plumbing-desc'>동파 해빙 전문<br>긴급 출동</div></div>""", unsafe_allow_html=True)
     st.markdown("---")
-    
-    # 긴급 출동 요청
     st.subheader("🚨 긴급 출동 요청 (24시)")
     st.markdown("배관 문제는 **골든타임**이 중요합니다. 지금 바로 연락 주세요.")
-    
     c_call, c_kakao = st.columns(2)
     with c_call:
-        st.markdown(f"<a href='tel:{010-3952-8405}' class='footer-btn btn-call' style='width:100%; display:block;'>📞 지금 바로 전화하기</a>", unsafe_allow_html=True)
+        st.markdown(f"<a href='tel:{MY_PHONE}' class='footer-btn btn-call' style='width:100%; display:block;'>📞 지금 바로 전화하기</a>", unsafe_allow_html=True)
     with c_kakao:
-        st.markdown(f"<a href='{https://open.kakao.com/o/seWGDKVh}' target='_blank' class='footer-btn btn-kakao' style='width:100%; display:block;'>💬 카톡으로 사진 보내기</a>", unsafe_allow_html=True)
-    
+        st.markdown(f"<a href='{MY_KAKAO_LINK}' target='_blank' class='footer-btn btn-kakao' style='width:100%; display:block;'>💬 카톡으로 사진 보내기</a>", unsafe_allow_html=True)
     st.markdown("<br><br>", unsafe_allow_html=True)
-    
-    # 신뢰 포인트
     st.success("✅ **국가공인 자격 보유** | ✅ **배상책임보험 가입 업체** | ✅ **카드 결제 환영**")
 
-
-# 👇 [하단 고정 버튼]
+# 👇 [하단 고정 버튼] (연락처 변수 고정됨)
 st.markdown(f"""
     <div class='sticky-footer'>
-        <a href='tel:{010-3952-8405}' class='footer-btn btn-call'>📞 전화 상담</a>
-        <a href='{https://open.kakao.com/o/seWGDKVh}' target='_blank' class='footer-btn btn-kakao'>💬 카톡 문의</a>
+        <a href='tel:{MY_PHONE}' class='footer-btn btn-call'>📞 전화 상담</a>
+        <a href='{MY_KAKAO_LINK}' target='_blank' class='footer-btn btn-kakao'>💬 카톡 문의</a>
     </div>
 """, unsafe_allow_html=True)
